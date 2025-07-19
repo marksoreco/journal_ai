@@ -1,0 +1,1 @@
+OCR_ENGINE = "GPT4oOCRAdapter" 
