@@ -86,6 +86,25 @@
             background: #444;
             cursor: not-allowed;
         }
+        .todoist-btn {
+            background: #db4c3f;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 0.6rem 1.5rem;
+            font-size: 1.1rem;
+            cursor: pointer;
+            margin-top: 1rem;
+            margin-left: 1rem;
+            transition: background 0.2s;
+        }
+        .todoist-btn:hover:not(:disabled) {
+            background: #c53727;
+        }
+        .todoist-btn:disabled {
+            background: #444;
+            cursor: not-allowed;
+        }
         .message {
             margin-top: 1rem;
             font-size: 1rem;
@@ -105,6 +124,162 @@
             white-space: pre-wrap;
             display: none;
         }
+        .modal {
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background: #23272a;
+            border-radius: 12px;
+            padding: 2rem;
+            width: 500px;
+            max-width: 90vw;
+            color: #f3f3f3;
+        }
+        .modal-content h3 {
+            margin-top: 0;
+            color: #ff6b6b;
+        }
+        .confidence-info {
+            color: #ffa500;
+            font-weight: bold;
+            margin-bottom: 1rem;
+        }
+        .task-review {
+            margin-bottom: 1.5rem;
+        }
+        .task-review label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #b0b0b0;
+        }
+        .task-review textarea {
+            width: 100%;
+            padding: 0.8rem;
+            border: 2px solid #444;
+            border-radius: 6px;
+            background: #181a1b;
+            color: #f3f3f3;
+            font-family: inherit;
+            resize: vertical;
+        }
+        .task-review textarea:focus {
+            outline: none;
+            border-color: #4f8cff;
+        }
+        .task-review textarea:disabled {
+            background: #2a2a2a;
+            color: #ccc;
+            cursor: not-allowed;
+        }
+        .modal-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+        }
+        .accept-btn {
+            background: #1db954;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 0.6rem 1.2rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .accept-btn:hover {
+            background: #1aa34a;
+        }
+        .edit-btn {
+            background: #ff9800;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 0.6rem 1.2rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .edit-btn:hover {
+            background: #f57c00;
+        }
+        .back-btn {
+            background: #9c27b0;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 0.6rem 1.2rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .back-btn:hover {
+            background: #7b1fa2;
+        }
+        .cancel-btn {
+            background: #f44336;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 0.6rem 1.2rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .cancel-btn:hover {
+            background: #d32f2f;
+        }
+        
+        .confirm-btn {
+            background: #2196F3;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 0.6rem 1.2rem;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-right: 10px;
+        }
+        
+        .confirm-btn:hover {
+            background: #1976D2;
+        }
+        
+        .task-summary {
+            max-height: 300px;
+            overflow-y: auto;
+            margin: 15px 0;
+            padding: 10px;
+            background-color: #2a2a2a;
+            border-radius: 5px;
+            border: 1px solid #444;
+        }
+        
+        .summary-section h4 {
+            margin: 10px 0 5px 0;
+            color: #fff;
+            font-size: 14px;
+        }
+        
+        .summary-section ul {
+            margin: 5px 0 15px 0;
+            padding-left: 20px;
+        }
+        
+        .summary-section li {
+            margin: 3px 0;
+            color: #ccc;
+            font-size: 13px;
+        }
+        
+        .message {
+            margin-top: 1rem;
+            font-size: 1rem;
+        }
     </style>
 </head>
 <body>
@@ -120,9 +295,40 @@
             <label><input type="radio" name="category" value="Month"> Month</label>
         </div>
         <button class="submit-btn" id="submitBtn" disabled>Submit</button>
+        <button class="todoist-btn" id="todoistBtn" disabled>Add to Todoist</button>
         <div class="message" id="message"></div>
     </div>
     <div class="ocr-result" id="ocrResult"></div>
+    <!-- Confidence Review Modal -->
+    <div id="confidenceModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>Review Low Confidence Task</h3>
+            <p class="confidence-info">Confidence: <span id="confidenceScore"></span></p>
+            <div class="task-review">
+                <label for="taskEdit">Task Text:</label>
+                <textarea id="taskEdit" rows="3"></textarea>
+            </div>
+            <div class="modal-buttons">
+                <button id="cancelTask" class="cancel-btn">Cancel</button>
+                <button id="backTask" class="back-btn" style="display: none;">Back</button>
+                <button id="editTask" class="edit-btn">Edit</button>
+                <button id="acceptTask" class="accept-btn">Accept</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Confirmation Modal -->
+    <div id="confirmationModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>Confirm Add to Todoist</h3>
+            <p>All tasks have been reviewed. Ready to add the following to Todoist:</p>
+            <div class="task-summary" id="taskSummary"></div>
+            <div class="modal-buttons">
+                <button id="confirmAdd" class="confirm-btn">Confirm Add to Todoist</button>
+                <button id="cancelAdd" class="cancel-btn">Cancel</button>
+            </div>
+        </div>
+    </div>
     <script>
         const dropArea = document.getElementById('drop-area');
         const fileInput = document.getElementById('fileInput');
@@ -131,7 +337,42 @@
         const submitBtn = document.getElementById('submitBtn');
         const message = document.getElementById('message');
         const ocrResult = document.getElementById('ocrResult');
+        const todoistBtn = document.getElementById('todoistBtn');
         let selectedFile = null;
+        let lastOcrData = null;
+        let lowConfidenceTasks = [];
+        let currentTaskIndex = 0;
+        let reviewedTaskData = null;
+        let confidenceThreshold = 0.8; // Default value
+
+        // Modal elements
+        const confidenceModal = document.getElementById('confidenceModal');
+        const confidenceScore = document.getElementById('confidenceScore');
+        const taskEdit = document.getElementById('taskEdit');
+        const acceptTask = document.getElementById('acceptTask');
+        const editTask = document.getElementById('editTask');
+        const backTask = document.getElementById('backTask');
+        const cancelTask = document.getElementById('cancelTask');
+        
+        // Confirmation modal elements
+        const confirmationModal = document.getElementById('confirmationModal');
+        const taskSummary = document.getElementById('taskSummary');
+        const confirmAdd = document.getElementById('confirmAdd');
+        const cancelAdd = document.getElementById('cancelAdd');
+
+        // Load configuration on page load
+        async function loadConfig() {
+            try {
+                const response = await fetch('/config');
+                const config = await response.json();
+                confidenceThreshold = config.task_confidence_threshold;
+            } catch (err) {
+                console.warn('Failed to load config, using default threshold:', confidenceThreshold);
+            }
+        }
+
+        // Load config when page loads
+        loadConfig();
 
         function isValidImage(file) {
             const validTypes = ['image/jpeg', 'image/png'];
@@ -150,6 +391,109 @@
 
         function resetPreview() {
             preview.innerHTML = '';
+        }
+
+        function extractLowConfidenceTasks(ocrData) {
+            const tasks = [];
+            let taskData;
+            
+            if (typeof ocrData === 'string') {
+                taskData = JSON.parse(ocrData);
+            } else {
+                taskData = ocrData;
+            }
+            
+            // Extract priority tasks with confidence < 0.9
+            if (taskData.prepare_priority) {
+                taskData.prepare_priority.forEach((task, index) => {
+                    if (task.confidence < confidenceThreshold) {
+                        tasks.push({
+                            type: 'priority',
+                            index: index,
+                            task: task.task,
+                            confidence: task.confidence,
+                            original: task
+                        });
+                    }
+                });
+            }
+            
+            // Extract to-do tasks with confidence < 0.9
+            if (taskData.to_do) {
+                taskData.to_do.forEach((task, index) => {
+                    if (task.confidence < confidenceThreshold) {
+                        tasks.push({
+                            type: 'todo',
+                            index: index,
+                            task: task.task,
+                            confidence: task.confidence,
+                            original: task
+                        });
+                    }
+                });
+            }
+            
+            return tasks;
+        }
+
+        function showNextLowConfidenceTask() {
+            if (currentTaskIndex >= lowConfidenceTasks.length) {
+                // All tasks reviewed, show confirmation dialog
+                confidenceModal.style.display = 'none';
+                showConfirmationDialog();
+                return;
+            }
+            
+            const currentTask = lowConfidenceTasks[currentTaskIndex];
+            confidenceScore.textContent = `${(currentTask.confidence * 100).toFixed(1)}%`;
+            taskEdit.value = currentTask.task;
+            taskEdit.disabled = true; // Start with textarea disabled
+            editTask.textContent = 'Edit'; // Reset edit button text
+            backTask.style.display = currentTaskIndex > 0 ? 'inline-block' : 'none'; // Show back button for 2nd+ tasks
+            confidenceModal.style.display = 'flex';
+        }
+        
+        function showConfirmationDialog() {
+            // Generate task summary
+            const summary = generateTaskSummary(reviewedTaskData);
+            taskSummary.innerHTML = summary;
+            confirmationModal.style.display = 'flex';
+        }
+        
+        function generateTaskSummary(taskData) {
+            let summary = '<div class="summary-section">';
+            
+            // Priority tasks
+            if (taskData.prepare_priority && taskData.prepare_priority.length > 0) {
+                summary += '<h4>Priority Tasks:</h4><ul>';
+                taskData.prepare_priority.forEach(task => {
+                    const taskText = typeof task === 'string' ? task : task.task;
+                    summary += `<li>${taskText}</li>`;
+                });
+                summary += '</ul>';
+            }
+            
+            // Regular tasks
+            if (taskData.to_do && taskData.to_do.length > 0) {
+                summary += '<h4>To-Do Tasks:</h4><ul>';
+                taskData.to_do.forEach(task => {
+                    const taskText = typeof task === 'string' ? task : task.task;
+                    summary += `<li>${taskText}</li>`;
+                });
+                summary += '</ul>';
+            }
+            
+            summary += '</div>';
+            return summary;
+        }
+
+        function updateTaskInData(taskData, taskType, index, newTaskText) {
+            if (taskType === 'priority') {
+                taskData.prepare_priority[index].task = newTaskText;
+            } else if (taskType === 'todo') {
+                taskData.to_do[index].task = newTaskText;
+            }
+            return taskData;
         }
 
         function handleFile(file) {
@@ -192,6 +536,7 @@
         submitBtn.addEventListener('click', async () => {
             if (!selectedFile) return;
             submitBtn.disabled = true;
+            todoistBtn.disabled = true;
             message.textContent = 'Uploading...';
             ocrResult.textContent = '';
             const formData = new FormData();
@@ -207,6 +552,8 @@
                 const result = await response.json();
                 if (response.ok) {
                     message.textContent = 'Upload successful: ' + result.filename;
+                    lastOcrData = result.ocr_text;
+                    todoistBtn.disabled = false; // Re-enable Todoist button after successful upload
                     if (result.ocr_text) {
                         ocrResult.textContent = result.ocr_text;
                         ocrResult.style.display = 'block';
@@ -218,13 +565,131 @@
                     message.textContent = 'Error: ' + (result.detail || 'Upload failed.');
                     ocrResult.textContent = '';
                     ocrResult.style.display = 'none';
+                    todoistBtn.disabled = true;
                 }
             } catch (err) {
                 message.textContent = 'Error: Upload failed.';
                 ocrResult.textContent = '';
                 ocrResult.style.display = 'none';
+                todoistBtn.disabled = true;
             }
             submitBtn.disabled = false;
+        });
+
+        todoistBtn.addEventListener('click', async () => {
+            if (!lastOcrData) return;
+            
+            todoistBtn.disabled = true;
+            message.textContent = 'Preparing tasks for Todoist...';
+            
+            // Extract low confidence tasks
+            lowConfidenceTasks = extractLowConfidenceTasks(lastOcrData);
+            
+            if (lowConfidenceTasks.length === 0) {
+                // No low confidence tasks, proceed directly
+                uploadToTodoist(lastOcrData);
+            } else {
+                // Start confidence review process
+                currentTaskIndex = 0;
+                reviewedTaskData = typeof lastOcrData === 'string' ? JSON.parse(lastOcrData) : lastOcrData;
+                showNextLowConfidenceTask();
+            }
+        });
+
+        async function uploadToTodoist(taskData) {
+            try {
+                const response = await fetch('/upload-to-todoist', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(taskData)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    message.textContent = `Todoist: ${result.message}`;
+                } else {
+                    message.textContent = 'Error: ' + (result.detail || 'Failed to add to Todoist.');
+                }
+            } catch (err) {
+                message.textContent = 'Error: Failed to add to Todoist.';
+            }
+            
+            todoistBtn.disabled = false;
+        }
+
+        // Modal event handlers
+        editTask.addEventListener('click', () => {
+            if (taskEdit.disabled) {
+                // Enable editing
+                taskEdit.disabled = false;
+                taskEdit.focus();
+                editTask.textContent = 'Done';
+            } else {
+                // Disable editing
+                taskEdit.disabled = true;
+                editTask.textContent = 'Edit';
+            }
+        });
+
+        backTask.addEventListener('click', () => {
+            if (currentTaskIndex > 0) {
+                // Save current task changes before going back
+                const currentTask = lowConfidenceTasks[currentTaskIndex];
+                const updatedTaskText = taskEdit.value.trim();
+                reviewedTaskData = updateTaskInData(reviewedTaskData, currentTask.type, currentTask.index, updatedTaskText);
+                
+                // Go back to previous task
+                currentTaskIndex--;
+                showNextLowConfidenceTask();
+            }
+        });
+
+        cancelTask.addEventListener('click', () => {
+            confidenceModal.style.display = 'none';
+            todoistBtn.disabled = false; // Re-enable Todoist button
+            message.textContent = 'Todoist upload cancelled.';
+        });
+
+        acceptTask.addEventListener('click', () => {
+            const currentTask = lowConfidenceTasks[currentTaskIndex];
+            const updatedTaskText = taskEdit.value.trim();
+            
+            // Update the task data with the reviewed text
+            reviewedTaskData = updateTaskInData(reviewedTaskData, currentTask.type, currentTask.index, updatedTaskText);
+            
+            // Move to next task
+            currentTaskIndex++;
+            showNextLowConfidenceTask();
+        });
+
+        // Confirmation modal event handlers
+        confirmAdd.addEventListener('click', () => {
+            confirmationModal.style.display = 'none';
+            uploadToTodoist(reviewedTaskData);
+        });
+        
+        cancelAdd.addEventListener('click', () => {
+            confirmationModal.style.display = 'none';
+            todoistBtn.disabled = false;
+        });
+        
+        // Close modals when clicking outside
+        confidenceModal.addEventListener('click', (e) => {
+            if (e.target === confidenceModal) {
+                confidenceModal.style.display = 'none';
+                todoistBtn.disabled = false;
+                message.textContent = 'Todoist upload cancelled.';
+            }
+        });
+        
+        confirmationModal.addEventListener('click', (e) => {
+            if (e.target === confirmationModal) {
+                confirmationModal.style.display = 'none';
+                todoistBtn.disabled = false;
+            }
         });
     </script>
 </body>

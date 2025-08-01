@@ -1,1 +1,1 @@
- 
+# Journal AI package 
