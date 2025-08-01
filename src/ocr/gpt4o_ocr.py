@@ -1,9 +1,13 @@
+import logging
 from .base import BaseOCR
 import base64
 import os
 import json
 from openai import OpenAI
 from openai.types.chat import ChatCompletionToolParam
+
+# Configure logger for this module
+logger = logging.getLogger(__name__)
 
 class GPT4oOCRAdapter(BaseOCR):
     def __init__(self):
@@ -14,6 +18,8 @@ class GPT4oOCRAdapter(BaseOCR):
         self.client = OpenAI(api_key=api_key)
 
     def extract_text(self, image_path: str) -> str:
+        logger.info(f"Starting OCR extraction for image: {image_path}")
+        
         # Read and encode the image
         with open(image_path, "rb") as image_file:
             encoded_image = base64.b64encode(image_file.read()).decode('utf-8')
@@ -39,62 +45,144 @@ Your job is to:
 - Return a JSON object with a key for each section and its content.
 - If a section is not present or has no content, leave it blank or null.
 
+IMPORTANT: For each extracted item, provide a realistic confidence score (0.0 to 1.0) based on:
+- Text clarity and readability (clear text = higher confidence)
+- Handwriting quality (neat handwriting = higher confidence)
+- Completeness of text (complete words = higher confidence)
+- Certainty of interpretation (unambiguous = higher confidence)
+- Image quality (sharp, well-lit = higher confidence)
+
+Confidence guidelines:
+- 0.90-1.0: Perfect clarity, printed text, or very neat handwriting
+- 0.80-0.89: Clear handwriting, complete words, high certainty
+- 0.70-0.79: Readable but some uncertainty, minor smudges, special characters, etc.
+- 0.60-0.69: Somewhat unclear, partial words, moderate uncertainty
+- 0.50-0.59: Unclear text, significant uncertainty, possible errors
+- Below 0.50: Very unclear, likely incorrect interpretation
+
 Here is an example of the expected output format for a Monk Manual daily page:
 
 {
-  "date": "Monday, Nov 12, 2018",
+  "date": {
+    "value": "Monday, Nov 12, 2018",
+    "confidence": 0.98
+  },
   "prepare_priority": [
-    "Plan upcoming week",
-    "Finish monthly report",
-    "Catch up with Matt"
+    {
+      "task": "Plan upcoming week",
+      "confidence": 0.94
+    },
+    {
+      "task": "Finish monthly report",
+      "confidence": 0.87
+    },
+    {
+      "task": "Do laundry/put away",
+      "confidence": 0.68
+    },
+    {
+      "task": "Catch up with Matt",
+      "confidence": 0.96
+    }
   ],
   "to_do": [
-    "Check the AM news",
-    "Check AM emails",
-    "Read afternoon updates",
-    "Respond to afternoon emails",
-    "Tie up loose ends",
-    "Reflect and prepare"
+    {
+      "task": "Check the AM news",
+      "confidence": 0.89
+    },
+    {
+      "task": "Check AM emails",
+      "confidence": 0.92
+    },
+    {
+      "task": "Read afternoon updates",
+      "confidence": 0.78
+    },
+    {
+      "task": "Respond to afternoon emails",
+      "confidence": 0.85
+    },
+    {
+      "task": "Tie up loose ends",
+      "confidence": 0.72
+    },
+    {
+      "task": "Reflect and prepare",
+      "confidence": 0.88
+    }
   ],
   "i_am_grateful_for": [
-    "Warm weather",
-    "Coffee",
-    "Madeline"
+    {
+      "item": "Warm weather",
+      "confidence": 0.95
+    },
+    {
+      "item": "Coffee",
+      "confidence": 0.98
+    },
+    {
+      "item": "Madeline",
+      "confidence": 0.97
+    }
   ],
   "i_am_looking_forward_to": [
-    "Catching up with Matt"
+    {
+      "item": "Catching up with Matt",
+      "confidence": 0.93
+    }
   ],
-  "habit": "Leave work at work",
+  "habit": {
+    "value": "Leave work at work",
+    "confidence": 0.82
+  },
   "daily": [
     {
       "hour": 6,
       "activities": [
-        "Check the news"
+        {
+          "activity": "Check the news",
+          "confidence": 0.91
+        }
       ]
     },
     {
       "hour": 7,
       "activities": [
-        "Get ready for work"
+        {
+          "activity": "Get ready for work",
+          "confidence": 0.94
+        }
       ]
     },
     {
       "hour": 8,
       "activities": [
-        "Walk to work"
+        {
+          "activity": "Walk to work",
+          "confidence": 0.96
+        }
       ]
     },
     {
       "hour": 9,
       "activities": [
-        "Check emails"
+        {
+          "activity": "Check emails",
+          "confidence": 0.97
+        }
       ]
     },
     {
       "hour": 10,
       "activities": [
-        "Look to week ahead",
-        "Finish monthly report"
+        {
+          "activity": "Look to week ahead",
+          "confidence": 0.79
+        },
+        {
+          "activity": "Finish monthly report",
+          "confidence": 0.85
+        }
       ]
     },
     {
@@ -104,67 +192,100 @@ Here is an example of the expected output format for a Monk Manual daily page:
     {
       "hour": 12,
       "activities": [
-        "Lunch"
+        {
+          "activity": "Lunch",
+          "confidence": 0.98
+        }
       ]
     },
     {
       "hour": 13,
       "activities": [
-        "Meeting with team"
+        {
+          "activity": "Meeting with team",
+          "confidence": 0.88
+        }
       ]
     },
     {
       "hour": 14,
       "activities": [
-        "Read status updates"
+        {
+          "activity": "Read status updates",
+          "confidence": 0.81
+        }
       ]
     },
     {
       "hour": 15,
       "activities": [
-        "Respond to emails"
+        {
+          "activity": "Respond to emails",
+          "confidence": 0.90
+        }
       ]
     },
     {
       "hour": 16,
       "activities": [
-        "Staff meeting"
+        {
+          "activity": "Staff meeting",
+          "confidence": 0.92
+        }
       ]
     },
     {
       "hour": 17,
       "activities": [
-        "Tie up day's loose ends"
+        {
+          "activity": "Tie up day's loose ends",
+          "confidence": 0.76
+        }
       ]
     },
     {
       "hour": 18,
       "activities": [
-        "Walk home"
+        {
+          "activity": "Walk home",
+          "confidence": 0.95
+        }
       ]
     },
     {
       "hour": 19,
       "activities": [
-        "Dinner/call Matt"
+        {
+          "activity": "Dinner/call Matt",
+          "confidence": 0.71
+        }
       ]
     },
     {
       "hour": 20,
       "activities": [
-        "Reflect/Prepare"
+        {
+          "activity": "Reflect/Prepare",
+          "confidence": 0.77
+        }
       ]
     },
     {
       "hour": 21,
       "activities": [
-        "Get ready for bed"
+        {
+          "activity": "Get ready for bed",
+          "confidence": 0.96
+        }
       ]
     },
     {
       "hour": 22,
       "activities": [
-        "Bed"
+        {
+          "activity": "Bed",
+          "confidence": 0.99
+        }
       ]
     }
   ]
@@ -180,32 +301,69 @@ Here is an example of the expected output format for a Monk Manual daily page:
                     "type": "object",
                     "properties": {
                         "date": {
-                            "type": "string",
-                            "items": { "type": "string" },
+                            "type": "object",
+                            "properties": {
+                                "value": { "type": "string" },
+                                "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                            },
+                            "required": ["value", "confidence"],
                             "description": "The date of the page"
                         },
                         "prepare_priority": {
                             "type": "array",
-                            "items": { "type": "string" },
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "task": { "type": "string" },
+                                    "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                                },
+                                "required": ["task", "confidence"]
+                            },
                             "description": "The three biggest priorities for the day"
                         },
                         "to_do": {
                             "type": "array",
-                            "items": { "type": "string" },
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "task": { "type": "string" },
+                                    "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                                },
+                                "required": ["task", "confidence"]
+                            },
                             "description": "Additional lower-prioritytasks for the day"
                         },
                         "i_am_grateful_for": {
                             "type": "array",
-                            "items": { "type": "string" },
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "item": { "type": "string" },
+                                    "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                                },
+                                "required": ["item", "confidence"]
+                            },
                             "description": "Things the user is grateful for today"
                         },
                         "i_am_looking_forward_to": {
                             "type": "array",
-                            "items": { "type": "string" },
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "item": { "type": "string" },
+                                    "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                                },
+                                "required": ["item", "confidence"]
+                            },
                             "description": "Things to look forward to today"
                         },
                         "habit": {
-                            "type": "string",
+                            "type": "object",
+                            "properties": {
+                                "value": { "type": "string" },
+                                "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                            },
+                            "required": ["value", "confidence"],
                             "description": "Habit to focus on today"
                         },
                         "daily": {
@@ -219,7 +377,14 @@ Here is an example of the expected output format for a Monk Manual daily page:
                                     },
                                     "activities": {
                                         "type": "array",
-                                        "items": { "type": "string" },
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "activity": { "type": "string" },
+                                                "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                                            },
+                                            "required": ["activity", "confidence"]
+                                        },
                                         "description": "Activities for this hour"
                                     }
                                 },
@@ -228,12 +393,13 @@ Here is an example of the expected output format for a Monk Manual daily page:
                             "description": "Hourly breakdown of the day as tuples of [hour, activities]"
                         },
                     },
-                    "required": ["date"]
+                    "required": ["date", "prepare_priority"]
                 }
             }
         }]
 
         try:
+            logger.debug("Sending request to GPT-4o for OCR processing")
             response = self.client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
@@ -259,9 +425,18 @@ Here is an example of the expected output format for a Monk Manual daily page:
             # Check if tool was called
             if response.choices[0].message.tool_calls:
                 tool_call = response.choices[0].message.tool_calls[0]
-                return json.dumps(json.loads(tool_call.function.arguments), indent=2)
+                logger.debug("GPT-4o returned function call response")
+                try:
+                    result = json.dumps(json.loads(tool_call.function.arguments), indent=2)
+                    logger.info("OCR extraction completed successfully")
+                    return result
+                except json.JSONDecodeError:
+                    logger.error(f"Invalid JSON response from GPT-4o: {tool_call.function.arguments}")
+                    return f"Error: Invalid JSON response from GPT-4o: {tool_call.function.arguments}"
             else:
+                logger.warning("GPT-4o did not return function call, using content instead")
                 return content.strip() if content else ""
             
         except Exception as e:
+            logger.error(f"Error processing image: {str(e)}")
             return f"Error processing image: {str(e)}" 

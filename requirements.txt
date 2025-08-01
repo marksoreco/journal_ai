@@ -3,3 +3,6 @@ uvicorn
 python-multipart
 openai
 python-dotenv
+todoist-api-python
+requests
+sentence-transformers
