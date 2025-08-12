@@ -435,7 +435,7 @@ Here is an example of the expected output format for a Monk Manual daily page:
                     return f"Error: Invalid JSON response from GPT-4o: {tool_call.function.arguments}"
             else:
                 logger.warning("GPT-4o did not return function call, using content instead")
-                return content.strip() if content else ""
+            return content.strip() if content else ""
             
         except Exception as e:
             logger.error(f"Error processing image: {str(e)}")

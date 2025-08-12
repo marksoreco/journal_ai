@@ -6,3 +6,17 @@ python-dotenv
 todoist-api-python
 requests
 sentence-transformers
+dateparser
+
+# Google API
+google-api-python-client
+
+# Google Auth
+google-auth-oauthlib
+google-auth-httplib2
+
+# RAG Dependencies
+faiss-cpu
+numpy
+pandas
+pydantic

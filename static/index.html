@@ -14,6 +14,7 @@
             align-items: center;
             min-height: 100vh;
             margin: 0;
+            margin-right: 150px; /* Create space for Gmail panel */
         }
         h1 {
             margin-top: 2rem;
@@ -77,7 +78,7 @@
             border: none;
             border-radius: 6px;
             padding: 0.6rem 1.5rem;
-            font-size: 1.1rem;
+            font-size: 1rem;
             cursor: pointer;
             margin-top: 1rem;
             transition: background 0.2s;
@@ -92,7 +93,7 @@
             border: none;
             border-radius: 6px;
             padding: 0.6rem 1.5rem;
-            font-size: 1.1rem;
+            font-size: 1rem;
             cursor: pointer;
             margin-top: 1rem;
             margin-left: 1rem;
@@ -116,7 +117,7 @@
             border-radius: 10px;
             color: #f8f8f2;
             font-family: 'Fira Mono', 'Menlo', 'Consolas', 'Liberation Mono', monospace;
-            font-size: 1.15rem;
+            font-size: 9pt;
             box-shadow: 0 2px 8px #000a;
             max-width: 700px;
             width: 700px;
@@ -234,6 +235,14 @@
             background: #d32f2f;
         }
         
+        #logoutBtn:hover {
+            background: #d32f2f !important;
+        }
+        
+        #loginBtn:hover {
+            background: #45a049 !important;
+        }
+        
         .confirm-btn {
             background: #2196F3;
             color: #fff;
@@ -280,10 +289,140 @@
             margin-top: 1rem;
             font-size: 1rem;
         }
+        
+        /* Popup styles */
+        .popup {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        .popup-content {
+            background-color: #2a2a2a;
+            border: 1px solid #666;
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+            max-width: 350px;
+            width: 90%;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+        
+        .popup-icon {
+            font-size: 2rem;
+            color: #888;
+            margin-bottom: 0.5rem;
+        }
+        
+        .popup-content h3 {
+            color: #ccc;
+            margin: 0 0 0.5rem 0;
+            font-size: 1.2rem;
+        }
+        
+        .popup-content p {
+            color: #aaa;
+            margin: 0 0 1rem 0;
+            font-size: 0.9rem;
+        }
+        
+        /* Gmail Data Section Styles */
+        .gmail-container {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            padding: 1rem;
+            background: #23272a;
+            border-radius: 8px;
+            width: 250px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            z-index: 100;
+        }
+        
+        .gmail-container h2 {
+            margin-top: 0;
+            margin-bottom: 1rem;
+            color: #888;
+            text-align: left;
+            font-size: 1rem;
+            font-weight: normal;
+        }
+        
+        .gmail-form {
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+        }
+        
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+        }
+        
+        .form-group label {
+            color: #aaa;
+            font-weight: normal;
+            font-size: 0.8rem;
+        }
+        
+        .form-group input[type="date"],
+        .form-group input[type="number"] {
+            padding: 0.4rem;
+            border: 1px solid #444;
+            border-radius: 4px;
+            background: #181a1b;
+            color: #f3f3f3;
+            font-size: 0.8rem;
+        }
+        
+        .form-group input[type="date"]:focus,
+        .form-group input[type="number"]:focus {
+            outline: none;
+            border-color: #4f8cff;
+        }
+        
+        .get-data-btn {
+            background: #4f8cff;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            padding: 0.4rem 0.8rem;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 0.3rem;
+        }
+        
+        .get-data-btn:hover:not(:disabled) {
+            background: #357ae8;
+        }
+        
+        .get-data-btn:disabled {
+            background: #444;
+            cursor: not-allowed;
+        }
+        
+        .gmail-message {
+            margin-top: 0.5rem;
+            font-size: 0.7rem;
+            text-align: left;
+        }
     </style>
 </head>
 <body>
-    <h1>Journal AI</h1>
+    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; max-width: 800px; margin-bottom: 1rem;">
+        <h1>Journal AI</h1>
+        <button id="logoutBtn" style="background: #f44336; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; transition: background 0.2s;">Logout</button>
+        <button id="loginBtn" style="background: #4CAF50; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; transition: background 0.2s; display: none;">Login</button>
+    </div>
     <div class="upload-container" id="drop-area">
         <div class="upload-label">Drag & drop an image here, or</div>
         <button class="browse-btn" id="browseBtn">Browse Computer</button>
@@ -299,6 +438,23 @@
         <div class="message" id="message"></div>
     </div>
     <div class="ocr-result" id="ocrResult"></div>
+    
+    <!-- Gmail Data Section -->
+    <div class="gmail-container" id="gmailContainer" style="display: none;">
+        <h2>Get Gmail Data</h2>
+        <div class="gmail-form">
+            <div class="form-group">
+                <label for="sinceDate">Since Date:</label>
+                <input type="date" id="sinceDate" />
+            </div>
+            <div class="form-group">
+                <label for="emailLimit">Limit:</label>
+                <input type="number" id="emailLimit" value="100" min="1" max="500" />
+            </div>
+            <button class="get-data-btn" id="getDataBtn">Get Data</button>
+        </div>
+        <div class="gmail-message" id="gmailMessage"></div>
+    </div>
     <!-- Confidence Review Modal -->
     <div id="confidenceModal" class="modal" style="display: none;">
         <div class="modal-content">
@@ -324,8 +480,8 @@
             <p>All tasks have been reviewed. Ready to add the following to Todoist:</p>
             <div class="task-summary" id="taskSummary"></div>
             <div class="modal-buttons">
-                <button id="confirmAdd" class="confirm-btn">Confirm Add to Todoist</button>
                 <button id="cancelAdd" class="cancel-btn">Cancel</button>
+                <button id="confirmAdd" class="confirm-btn">Confirm Add to Todoist</button>
             </div>
         </div>
     </div>
@@ -359,20 +515,193 @@
         const taskSummary = document.getElementById('taskSummary');
         const confirmAdd = document.getElementById('confirmAdd');
         const cancelAdd = document.getElementById('cancelAdd');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const loginBtn = document.getElementById('loginBtn');
+        
+        // Gmail section elements
+        const gmailContainer = document.getElementById('gmailContainer');
+        const getDataBtn = document.getElementById('getDataBtn');
+        const sinceDateInput = document.getElementById('sinceDate');
+        const emailLimitInput = document.getElementById('emailLimit');
+        const gmailMessage = document.getElementById('gmailMessage');
 
         // Load configuration on page load
         async function loadConfig() {
             try {
                 const response = await fetch('/config');
+                if (response.status === 401) {
+                    // Redirect to authentication if unauthorized
+                    window.location.href = '/auth/google';
+                    return;
+                }
                 const config = await response.json();
                 confidenceThreshold = config.task_confidence_threshold;
             } catch (err) {
+                if (err.message && err.message.includes('401')) {
+                    // Redirect to authentication if unauthorized
+                    window.location.href = '/auth/google';
+                    return;
+                }
                 console.warn('Failed to load config, using default threshold:', confidenceThreshold);
             }
         }
 
         // Load config when page loads
         loadConfig();
+        
+        // Set default date to 30 days ago
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        sinceDateInput.value = thirtyDaysAgo.toISOString().split('T')[0];
+        
+        // Global drag and drop prevention when not authenticated
+        document.addEventListener('dragover', (e) => {
+            if (loginBtn.style.display !== 'none') {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        });
+        
+        document.addEventListener('drop', (e) => {
+            if (loginBtn.style.display !== 'none') {
+                e.preventDefault();
+                e.stopPropagation();
+                message.textContent = 'Please login to upload files.';
+                setTimeout(() => {
+                    message.textContent = '';
+                }, 3000);
+            }
+        });
+
+        // Flag to prevent infinite redirect loops
+        let authCheckInProgress = false;
+
+        // Function to check authentication and update UI accordingly
+        async function checkAuthentication() {
+            // Prevent multiple simultaneous auth checks
+            if (authCheckInProgress) {
+                console.log('Authentication check already in progress, skipping...');
+                return;
+            }
+            
+            authCheckInProgress = true;
+            
+            try {
+                console.log('Checking authentication status...');
+                const response = await fetch('/auth/status');
+                const result = await response.json();
+                
+                console.log('Auth status result:', result);
+                
+                if (!result.authenticated) {
+                    console.log('Not authenticated, showing login button...');
+                    // Show login button and hide logout button
+                    logoutBtn.style.display = 'none';
+                    loginBtn.style.display = 'inline-block';
+                    // Disable upload functionality
+                    disableUploadFunctionality();
+                } else {
+                    console.log('Authentication successful, showing logout button...');
+                    console.log('About to call enableUploadFunctionality...');
+                    // Show logout button and hide login button
+                    logoutBtn.style.display = 'inline-block';
+                    loginBtn.style.display = 'none';
+                    // Enable upload functionality
+                    enableUploadFunctionality();
+                }
+            } catch (error) {
+                console.error('Authentication check failed:', error);
+                // Show login button on error
+                logoutBtn.style.display = 'none';
+                loginBtn.style.display = 'inline-block';
+                disableUploadFunctionality();
+            } finally {
+                authCheckInProgress = false;
+            }
+        }
+
+        // Function to disable upload functionality when not authenticated
+        function disableUploadFunctionality() {
+            submitBtn.disabled = true;
+            todoistBtn.disabled = true;
+            browseBtn.disabled = true;
+            fileInput.disabled = true;
+            dropArea.style.pointerEvents = 'none';
+            dropArea.style.opacity = '0.6';
+            message.textContent = 'Please login to use the application.';
+            ocrResult.style.display = 'none';
+            gmailContainer.style.display = 'none';
+        }
+
+        // Function to enable upload functionality when authenticated
+        function enableUploadFunctionality() {
+            console.log('Enabling upload functionality and showing Gmail section');
+            submitBtn.disabled = false;
+            todoistBtn.disabled = true; // Will be enabled after successful upload
+            browseBtn.disabled = false;
+            fileInput.disabled = false;
+            dropArea.style.pointerEvents = 'auto';
+            dropArea.style.opacity = '1';
+            message.textContent = '';
+            // Don't show ocrResult until there's content
+            gmailContainer.style.display = 'block';
+            console.log('Gmail container display set to:', gmailContainer.style.display);
+        }
+
+        // Logout functionality
+        logoutBtn.addEventListener('click', async () => {
+            console.log('Logout initiated...');
+            
+            // Disable logout button to prevent multiple clicks
+            logoutBtn.disabled = true;
+            
+            // Clear the stored credentials on the server
+            try {
+                const response = await fetch('/auth/logout', { method: 'POST' });
+                const result = await response.json();
+                console.log('Server logout completed:', result);
+            } catch (error) {
+                console.error('Server logout failed:', error);
+            }
+            
+            // Clear browser session state
+            console.log('Clearing browser session state...');
+            sessionStorage.clear();
+            localStorage.clear();
+            
+            // Show logout success popup
+            showLogoutSuccessPopup();
+            
+            // Force a fresh authentication check with a longer delay
+            console.log('Forcing fresh authentication check...');
+            setTimeout(async () => {
+                await checkAuthentication();
+                // Re-enable logout button after auth check
+                logoutBtn.disabled = false;
+            }, 1000); // 1 second delay to ensure server processes logout
+        });
+
+        // Login functionality
+        loginBtn.addEventListener('click', async () => {
+            console.log('Login initiated...');
+            
+            // Force clear any cached authentication state
+            try {
+                await fetch('/auth/logout', { method: 'POST' });
+                console.log('Forced logout before login');
+            } catch (error) {
+                console.error('Forced logout failed:', error);
+            }
+            
+            // Clear browser session state
+            console.log('Clearing browser session state...');
+            sessionStorage.clear();
+            localStorage.clear();
+            
+            // Redirect to OAuth with timestamp to force fresh flow
+            const timestamp = Date.now();
+            window.location.href = `/auth/google?t=${timestamp}`;
+        });
 
         function isValidImage(file) {
             const validTypes = ['image/jpeg', 'image/png'];
@@ -519,17 +848,31 @@
 
         dropArea.addEventListener('dragover', (e) => {
             e.preventDefault();
-            dropArea.classList.add('dragover');
+            e.stopPropagation();
+            // Only add dragover styling if authenticated
+            if (loginBtn.style.display === 'none') {
+                dropArea.classList.add('dragover');
+            }
         });
         dropArea.addEventListener('dragleave', (e) => {
             e.preventDefault();
+            e.stopPropagation();
             dropArea.classList.remove('dragover');
         });
         dropArea.addEventListener('drop', (e) => {
             e.preventDefault();
+            e.stopPropagation();
             dropArea.classList.remove('dragover');
-            if (e.dataTransfer.files.length > 0) {
+            
+            // Only handle files if authenticated
+            if (loginBtn.style.display === 'none' && e.dataTransfer.files.length > 0) {
                 handleFile(e.dataTransfer.files[0]);
+            } else {
+                // Show message if not authenticated
+                message.textContent = 'Please login to upload files.';
+                setTimeout(() => {
+                    message.textContent = '';
+                }, 3000);
             }
         });
 
@@ -537,23 +880,28 @@
             if (!selectedFile) return;
             submitBtn.disabled = true;
             todoistBtn.disabled = true;
-            message.textContent = 'Uploading...';
+            message.textContent = 'Processing Image File...';
             ocrResult.textContent = '';
+            
             const formData = new FormData();
             formData.append('file', selectedFile);
             // Get selected category
             const category = document.querySelector('input[name="category"]:checked').value;
             formData.append('category', category);
+            
             try {
                 const response = await fetch('/upload-image', {
                     method: 'POST',
                     body: formData
                 });
                 const result = await response.json();
+                
                 if (response.ok) {
-                    message.textContent = 'Upload successful: ' + result.filename;
+                    // Process OCR results
                     lastOcrData = result.ocr_text;
                     todoistBtn.disabled = false; // Re-enable Todoist button after successful upload
+                    message.textContent = 'Processing complete!';
+                    
                     if (result.ocr_text) {
                         ocrResult.textContent = result.ocr_text;
                         ocrResult.style.display = 'block';
@@ -562,12 +910,22 @@
                         ocrResult.style.display = 'block';
                     }
                 } else {
+                    if (response.status === 401) {
+                        // Redirect to authentication if unauthorized
+                        window.location.href = '/auth/google';
+                        return;
+                    }
                     message.textContent = 'Error: ' + (result.detail || 'Upload failed.');
                     ocrResult.textContent = '';
                     ocrResult.style.display = 'none';
                     todoistBtn.disabled = true;
                 }
             } catch (err) {
+                if (err.message && err.message.includes('401')) {
+                    // Redirect to authentication if unauthorized
+                    window.location.href = '/auth/google';
+                    return;
+                }
                 message.textContent = 'Error: Upload failed.';
                 ocrResult.textContent = '';
                 ocrResult.style.display = 'none';
@@ -611,9 +969,19 @@
                 if (response.ok) {
                     message.textContent = `Todoist: ${result.message}`;
                 } else {
+                    if (response.status === 401) {
+                        // Redirect to authentication if unauthorized
+                        window.location.href = '/auth/google';
+                        return;
+                    }
                     message.textContent = 'Error: ' + (result.detail || 'Failed to add to Todoist.');
                 }
             } catch (err) {
+                if (err.message && err.message.includes('401')) {
+                    // Redirect to authentication if unauthorized
+                    window.location.href = '/auth/google';
+                    return;
+                }
                 message.textContent = 'Error: Failed to add to Todoist.';
             }
             
@@ -691,6 +1059,99 @@
                 todoistBtn.disabled = false;
             }
         });
+        
+        // Function to show logout success popup
+        function showLogoutSuccessPopup() {
+            const popup = document.createElement('div');
+            popup.className = 'popup';
+            popup.innerHTML = `
+                <div class="popup-content">
+                    <div class="popup-icon">✓</div>
+                    <h3>Logout Successful</h3>
+                    <p>You have been successfully logged out.</p>
+                    <button onclick="closePopup()" class="btn btn-primary">OK</button>
+                </div>
+            `;
+            document.body.appendChild(popup);
+            
+            // Auto-close after 6 seconds
+            setTimeout(() => {
+                if (popup.parentNode) {
+                    closePopup();
+                }
+            }, 6000);
+        }
+
+        // Function to close popup
+        function closePopup() {
+            const popup = document.querySelector('.popup');
+            if (popup) {
+                popup.remove();
+            }
+        }
+        
+        // Gmail Data functionality
+        getDataBtn.addEventListener('click', async () => {
+            const sinceDate = sinceDateInput.value;
+            const limit = parseInt(emailLimitInput.value);
+            
+            if (!sinceDate) {
+                gmailMessage.textContent = 'Please select a date.';
+                gmailMessage.style.color = '#ff6b6b';
+                return;
+            }
+            
+            if (!limit || limit < 1 || limit > 500) {
+                gmailMessage.textContent = 'Please enter a valid limit (1-500).';
+                gmailMessage.style.color = '#ff6b6b';
+                return;
+            }
+            
+            getDataBtn.disabled = true;
+            gmailMessage.textContent = 'Fetching Gmail data...';
+            gmailMessage.style.color = '#4f8cff';
+            
+            try {
+                const response = await fetch('/gmail/fetch-data', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        since_date: sinceDate,
+                        limit: limit
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    gmailMessage.textContent = `Success: ${result.message}`;
+                    gmailMessage.style.color = '#1db954';
+                } else {
+                    if (response.status === 401) {
+                        // Redirect to authentication if unauthorized
+                        window.location.href = '/auth/google';
+                        return;
+                    }
+                    gmailMessage.textContent = 'Error: ' + (result.detail || 'Failed to fetch Gmail data.');
+                    gmailMessage.style.color = '#ff6b6b';
+                }
+            } catch (err) {
+                if (err.message && err.message.includes('401')) {
+                    // Redirect to authentication if unauthorized
+                    window.location.href = '/auth/google';
+                    return;
+                }
+                gmailMessage.textContent = 'Error: Failed to fetch Gmail data.';
+                gmailMessage.style.color = '#ff6b6b';
+            }
+            
+            getDataBtn.disabled = false;
+        });
+        
+        // Check authentication status on page load
+        checkAuthentication();
     </script>
 </body>
 </html> 

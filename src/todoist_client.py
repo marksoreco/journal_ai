@@ -2,6 +2,8 @@ import os
 import logging
 from todoist_api_python.api import TodoistAPI
 from typing import List, Dict, Any
+import dateparser
+
 try:
     from .sbert_client import SBERTClient
     from .config import SBERT_ENABLED, SBERT_MODEL, SBERT_SIMILARITY_THRESHOLD, SBERT_CACHE_FILE
@@ -44,7 +46,7 @@ class TodoistClient:
                 self.use_sbert = False
                 self.sbert_client = None
 
-    def get_existing_tasks(self) -> List[str]:
+    def get_existing_tasks(self, due_date: str = "today") -> List[str]:
         """
         Get all existing tasks from Todoist
         
@@ -71,7 +73,9 @@ class TodoistClient:
                 # Handle normal case where each element is a task
                 for task in tasks_list:
                     content = getattr(task, 'content', '')
-                    if content and content.strip():
+                    due = getattr(task, 'due', '')
+                    task_due_date = getattr(due, 'date', '')
+                    if content and content.strip() and task_due_date == due_date:
                         existing_tasks.append(content.strip())
             
             logger.info(f"Retrieved {len(existing_tasks)} existing tasks from Todoist")
@@ -81,7 +85,7 @@ class TodoistClient:
             # Return empty list if API call fails
             return []
     
-    def check_duplicates_intelligently(self, new_tasks: List[str]) -> Dict[str, bool]:
+    def check_duplicates_intelligently(self, new_tasks: List[str], due_date: str) -> Dict[str, bool]:
         """
         Check for duplicates using SBERT if available, otherwise fallback to simple comparison
         
@@ -99,7 +103,7 @@ class TodoistClient:
         try:
             # Use SBERT for intelligent duplicate detection
             existing_tasks = self.get_existing_tasks()
-            return self.sbert_client.check_duplicate_tasks(new_tasks, existing_tasks)
+            return self.sbert_client.check_duplicate_tasks(new_tasks, existing_tasks, due_date)
         except Exception as e:
             # Fallback to simple text comparison if SBERT fails
             existing_tasks = self.get_existing_tasks()
@@ -156,6 +160,27 @@ class TodoistClient:
         except Exception as e:
             raise Exception(f"Failed to create task '{content}': {str(e)}")
 
+    def _parse_date_for_todoist(self, date_string: str) -> str:
+        """
+        Parse date string from OCR data and convert to Todoist-compatible format
+        
+        Args:
+            date_string: Date string from OCR (e.g., "Monday, Nov 12, 2018")
+            
+        Returns:
+            Todoist-compatible date string
+        """
+        try:
+            parsed_date = dateparser.parse(date_string)
+            if parsed_date:
+                return parsed_date.strftime('%Y-%m-%d')
+            else:
+                return "today"
+                    
+        except Exception as e:
+            logger.error(f"Error parsing date '{date_string}': {str(e)}, using 'today' instead")
+            return "today"
+
     def upload_tasks_from_ocr(self, task_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Upload tasks from OCR data to Todoist with intelligent duplicate checking
@@ -168,6 +193,12 @@ class TodoistClient:
         """
         logger.info("Starting task upload from OCR data")
         tasks_created = []
+        
+        # Extract date from task_data for due date
+        due_date = "today"  # Default fallback
+        if 'date' in task_data and task_data['date']:
+            due_date = self._parse_date_for_todoist(task_data['date']['value'])
+            logger.info(f"Using date from OCR data: {due_date}")
         
         # Extract all new tasks
         new_tasks = []
@@ -203,7 +234,7 @@ class TodoistClient:
         
         # Check for duplicates using intelligent detection
         logger.info("Checking for duplicate tasks")
-        duplicate_results = self.check_duplicates_intelligently(new_tasks)
+        duplicate_results = self.check_duplicates_intelligently(new_tasks, due_date)
         
         # Process each task based on duplicate check results
         for task_content in new_tasks:
@@ -220,9 +251,9 @@ class TodoistClient:
                 })
             else:
                 # Task is unique, create it
-                logger.debug(f"Creating new task: {task_content}")
+                logger.debug(f"Creating new task: {task_content} with due date: {due_date}")
                 try:
-                    new_task = self.create_task(task_content, priority=metadata['priority'])
+                    new_task = self.create_task(task_content, priority=metadata['priority'], due_string=due_date)
                     tasks_created.append(new_task)
                 except Exception as e:
                     logger.error(f"Failed to create task '{task_content}': {str(e)}")
@@ -240,7 +271,6 @@ class TodoistClient:
         message = f"Created {created_count} new tasks, skipped {skipped_count} duplicates"
         if failed_count > 0:
             message += f", {failed_count} failed"
-        message += " in Todoist"
         
         logger.info(f"Task upload completed: {message}")
         
