@@ -1,6 +1,10 @@
+.DS_Store
 .venv
 .env
 uploads/
 __pycache__/
 embeddings_cache.pkl
-
+credentials.json
+token.pickle
+gmail_since_*.json
+src/mcp_server.py
