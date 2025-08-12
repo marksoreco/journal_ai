@@ -8,8 +8,8 @@ import json
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 # Type ignore for linter - these imports work at runtime
-from todoist_client import TodoistClient  # type: ignore
-from sbert_client import SBERTClient  # type: ignore
+from todoist.todoist_client import TodoistClient  # type: ignore
+from todoist.sbert_client import SBERTClient  # type: ignore
 
 
 class TestDuplicateDetection(unittest.TestCase):
@@ -24,23 +24,24 @@ class TestDuplicateDetection(unittest.TestCase):
         self.env_patcher.start()
         
         # Mock Todoist API
-        self.todoist_api_patcher = patch('todoist_client.TodoistAPI')
+        self.todoist_api_patcher = patch('todoist.todoist_client.TodoistAPI')
         self.mock_todoist_api = self.todoist_api_patcher.start()
         
         # Create mock Todoist tasks with semantically similar variations
+        mock_due = Mock(date="today")
         self.mock_tasks = [
-            Mock(content="Check emails"),
-            Mock(content="Review project proposal"),
-            Mock(content="Call client"),
-            Mock(content="Prepare presentation"),
-            Mock(content="Send follow-up email"),
-            Mock(content="Schedule team meeting"),
-            Mock(content="Update project documentation"),
-            Mock(content="Review quarterly budget"),
-            Mock(content="Contact customer support"),
-            Mock(content="Complete project setup"),
-            Mock(content="Review Q1 results"),
-            Mock(content="")  # Empty task to test filtering
+            Mock(content="Check emails", due=mock_due),
+            Mock(content="Review project proposal", due=mock_due),
+            Mock(content="Call client", due=mock_due),
+            Mock(content="Prepare presentation", due=mock_due),
+            Mock(content="Send follow-up email", due=mock_due),
+            Mock(content="Schedule team meeting", due=mock_due),
+            Mock(content="Update project documentation", due=mock_due),
+            Mock(content="Review quarterly budget", due=mock_due),
+            Mock(content="Contact customer support", due=mock_due),
+            Mock(content="Complete project setup", due=mock_due),
+            Mock(content="Review Q1 results", due=mock_due),
+            Mock(content="", due=mock_due)  # Empty task to test filtering
         ]
         
         # Set up mock API response
@@ -53,7 +54,7 @@ class TestDuplicateDetection(unittest.TestCase):
     
     def test_todoist_client_initialization_with_sbert(self):
         """Test TodoistClient initialization with SBERT enabled"""
-        with patch('todoist_client.SBERTClient') as mock_sbert_class:
+        with patch('todoist.todoist_client.SBERTClient') as mock_sbert_class:
             mock_sbert_instance = Mock()
             mock_sbert_class.return_value = mock_sbert_instance
             
@@ -72,7 +73,7 @@ class TestDuplicateDetection(unittest.TestCase):
     
     def test_todoist_client_initialization_sbert_failure(self):
         """Test TodoistClient initialization when SBERT fails to initialize"""
-        with patch('todoist_client.SBERTClient', side_effect=Exception("SBERT not available")):
+        with patch('todoist.todoist_client.SBERTClient', side_effect=Exception("SBERT not available")):
             client = TodoistClient(use_sbert=True)
             
             self.assertFalse(client.use_sbert)
@@ -81,6 +82,9 @@ class TestDuplicateDetection(unittest.TestCase):
     def test_get_existing_tasks(self):
         """Test getting existing tasks from Todoist"""
         client = TodoistClient(use_sbert=False)
+        
+        # Set up mock to return the mock tasks
+        client.api.get_tasks.return_value = self.mock_tasks
         
         existing_tasks = client.get_existing_tasks()
         
@@ -122,7 +126,7 @@ class TestDuplicateDetection(unittest.TestCase):
     
     def test_check_duplicates_intelligently_with_sbert(self):
         """Test intelligent duplicate detection using SBERT with semantically similar tasks"""
-        with patch('todoist_client.SBERTClient') as mock_sbert_class:
+        with patch('todoist.todoist_client.SBERTClient') as mock_sbert_class:
             mock_sbert_instance = Mock()
             mock_sbert_class.return_value = mock_sbert_instance
             
@@ -161,7 +165,7 @@ class TestDuplicateDetection(unittest.TestCase):
                 "Complete proj setup", "Review Q1 results", "Review Q1 res",
                 "Setup project", "Project setup", "Setup proj"
             ]
-            results = client.check_duplicates_intelligently(new_tasks)
+            results = client.check_duplicates_intelligently(new_tasks, "today")
             
             expected = {
                 "Check emails": True, "Read emails": True, "Send email": True,
@@ -177,7 +181,7 @@ class TestDuplicateDetection(unittest.TestCase):
     
     def test_check_duplicates_intelligently_sbert_failure(self):
         """Test intelligent duplicate detection when SBERT fails"""
-        with patch('todoist_client.SBERTClient') as mock_sbert_class:
+        with patch('todoist.todoist_client.SBERTClient') as mock_sbert_class:
             mock_sbert_instance = Mock()
             mock_sbert_class.return_value = mock_sbert_instance
             
@@ -188,7 +192,7 @@ class TestDuplicateDetection(unittest.TestCase):
             client.sbert_client = mock_sbert_instance
             
             new_tasks = ["Check emails", "New task"]
-            results = client.check_duplicates_intelligently(new_tasks)
+            results = client.check_duplicates_intelligently(new_tasks, "today")
             
             # Should fall back to simple comparison
             self.assertIn("Check emails", results)
@@ -199,7 +203,7 @@ class TestDuplicateDetection(unittest.TestCase):
         client = TodoistClient(use_sbert=False)
         
         new_tasks = ["Check emails", "New task"]
-        results = client.check_duplicates_intelligently(new_tasks)
+        results = client.check_duplicates_intelligently(new_tasks, "today")
         
         # Should use simple comparison
         self.assertIn("Check emails", results)
@@ -207,7 +211,7 @@ class TestDuplicateDetection(unittest.TestCase):
     
     def test_upload_tasks_from_ocr_with_duplicates(self):
         """Test uploading tasks with intelligent duplicate detection"""
-        with patch('todoist_client.SBERTClient') as mock_sbert_class:
+        with patch('todoist.todoist_client.SBERTClient') as mock_sbert_class:
             mock_sbert_instance = Mock()
             mock_sbert_class.return_value = mock_sbert_instance
             
@@ -261,7 +265,7 @@ class TestDuplicateDetection(unittest.TestCase):
     
     def test_upload_tasks_from_ocr_task_creation_failure(self):
         """Test uploading when task creation fails"""
-        with patch('todoist_client.SBERTClient') as mock_sbert_class:
+        with patch('todoist.todoist_client.SBERTClient') as mock_sbert_class:
             mock_sbert_instance = Mock()
             mock_sbert_class.return_value = mock_sbert_instance
             
@@ -298,20 +302,22 @@ class TestSBERTClient(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         # Mock the SentenceTransformer to avoid loading actual model
-        self.sbert_patcher = patch('sbert_client.SentenceTransformer')
+        self.sbert_patcher = patch('todoist.sbert_client.SentenceTransformer')
         self.mock_sbert = self.sbert_patcher.start()
         self.mock_model = Mock()
         self.mock_sbert.return_value = self.mock_model
         
         # Mock numpy and sklearn
-        self.numpy_patcher = patch('sbert_client.np')
+        self.numpy_patcher = patch('todoist.sbert_client.np')
         self.mock_np = self.numpy_patcher.start()
         
-        self.sklearn_patcher = patch('sbert_client.cosine_similarity')
+        self.sklearn_patcher = patch('todoist.sbert_client.cosine_similarity')
         self.mock_cosine_similarity = self.sklearn_patcher.start()
         
         # Create SBERT client instance
         self.sbert_client = SBERTClient(model_name="test-model", cache_file="test_cache.pkl")
+        # Clear cache for consistent testing
+        self.sbert_client.embedding_cache = {}
     
     def tearDown(self):
         """Clean up after tests"""
@@ -320,6 +326,7 @@ class TestSBERTClient(unittest.TestCase):
         self.sklearn_patcher.stop()
         
         # Clean up test cache file
+        import os
         if os.path.exists("test_cache.pkl"):
             os.remove("test_cache.pkl")
     

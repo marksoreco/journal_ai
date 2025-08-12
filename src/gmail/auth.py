@@ -16,8 +16,8 @@ def get_gmail_service():
     """Get or refresh Gmail service with authentication."""
     creds = None
     try:
-        # Get token file path at project root
-        token_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "token.pickle")
+        # Get token file path in gmail directory
+        token_path = os.path.join(os.path.dirname(__file__), "token.pkl")
         
         # Load existing credentials if available
         if os.path.exists(token_path):
@@ -25,7 +25,7 @@ def get_gmail_service():
                 creds = pickle.load(token)
         
         # Check for logout lock
-        lock_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "logout.lock")
+        lock_file = os.path.join(os.path.dirname(__file__), "logout.lock")
         if os.path.exists(lock_file):
             logger.info("Logout lock detected, not refreshing credentials")
             raise HTTPException(status_code=401, detail="Authentication required. Visit /auth/google")

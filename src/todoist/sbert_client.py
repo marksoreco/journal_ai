@@ -22,6 +22,9 @@ class SBERTClient:
             similarity_threshold: Threshold for considering tasks as duplicates (0.0-1.0)
         """
         self.model_name = model_name
+        # Resolve cache file path relative to this module's directory
+        if not os.path.isabs(cache_file):
+            cache_file = os.path.join(os.path.dirname(__file__), cache_file)
         self.cache_file = cache_file
         self.similarity_threshold = similarity_threshold
         
@@ -45,6 +48,8 @@ class SBERTClient:
     def _save_cache(self):
         """Save embedding cache to file"""
         try:
+            # Ensure cache directory exists
+            os.makedirs(os.path.dirname(self.cache_file), exist_ok=True)
             with open(self.cache_file, 'wb') as f:
                 pickle.dump(self.embedding_cache, f)
         except Exception as e:
