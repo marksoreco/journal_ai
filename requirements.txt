@@ -4,7 +4,6 @@ python-multipart
 openai
 python-dotenv
 todoist-api-python
-requests
 sentence-transformers
 dateparser
 
@@ -16,7 +15,7 @@ google-auth-oauthlib
 google-auth-httplib2
 
 # RAG Dependencies
-faiss-cpu
 numpy
-pandas
 pydantic
+pinecone
+scikit-learn

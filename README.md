@@ -1,125 +1,217 @@
 # Journal AI - FastAPI Application
 
-A FastAPI application for image upload and OCR text extraction using GPT-4o.
+A comprehensive FastAPI application for image OCR processing, task management integration with Todoist, and Gmail-based RAG (Retrieval-Augmented Generation) system with intelligent duplicate detection.
+
+## Features
+
+- **Image OCR Processing**: Upload images and extract text using GPT-4o
+- **Todoist Integration**: Automatically create tasks from extracted text with intelligent duplicate detection
+- **Gmail RAG System**: Process emails, generate embeddings, and store in Pinecone vector database
+- **OAuth Authentication**: Secure Gmail API integration with token management
+- **SBERT Intelligence**: Advanced semantic similarity for duplicate detection using sentence transformers
+- **Modular Architecture**: Clean separation of concerns across packages
 
 ## Setup
 
-1. Install dependencies:
+1. **Install dependencies:**
 
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Create a `.env` file in the project root with your API keys:
+2. **Create a `.env` file in the project root:**
 
 ```bash
+# Required API Keys
 OPENAI_API_KEY=your-openai-api-key-here
 TODOIST_API_TOKEN=your-todoist-api-token-here
+PINECONE_API_KEY=your-pinecone-api-key-here
+
+# Gmail OAuth Configuration  
+GOOGLE_REDIRECT_URI=http://localhost:8000/auth/google/callback
+GOOGLE_CREDENTIALS_PATH=src/gmail/credentials.json
+
+# Optional: Milvus Configuration (for future use)
+MILVUS_USERNAME=your-username
+MILVUS_PASSWORD=your-password
+MILVUS_URI=your-milvus-uri
 ```
 
-## SBERT Integration (Optional)
+3. **Set up Gmail API credentials:**
+   - Create a Google Cloud project and enable Gmail API
+   - Download credentials and place as `src/gmail/credentials.json`
 
-For intelligent duplicate task detection, the system uses SBERT (Sentence Transformers) with the `all-MiniLM-L6-v2` model:
-
-1. **Automatic Installation**: The required packages are installed via `requirements.txt`
-2. **Model Download**: The SBERT model is automatically downloaded on first use (~80MB)
-3. **Persistent Caching**: Embeddings are cached to avoid recomputation
-4. **Configurable Threshold**: Adjust `SBERT_SIMILARITY_THRESHOLD` in `config.py` (default: 0.85)
-5. **Debug Visualization**: When `LOG_LEVEL` is set to "DEBUG", similarity matrices are displayed as tables
-
-If SBERT is not available, the system will automatically fall back to simple text comparison for duplicate detection.
-
-## Testing
-
-Run the test suite to verify the duplicate detection functionality:
+4. **Run the application:**
 
 ```bash
-# Run all tests
-python test/run_tests.py
-
-# Run specific test file
-python -m unittest test.test_basic
-python -m unittest test.test_duplicate_detection
-
-# Run with verbose output
-python -m unittest test.test_duplicate_detection -v
-```
-
-The tests include:
-- Basic setup verification
-- TodoistClient initialization with/without SBERT
-- Intelligent duplicate detection with mock responses
-- Fallback behavior when SBERT is unavailable
-- Error handling for API failures
-- Task upload scenarios with duplicate filtering
-
-3. Run the application:
-
-```bash
-# Option 1: Using the run.py entry point
+# Using the run.py entry point
 python -m src.run
 
-# Option 2: Using uvicorn directly
-uvicorn src.main:app --reload
+# Or using uvicorn directly
+uvicorn src.app:app --reload
 ```
+
+5. Visit [http://127.0.0.1:8000/ui](http://127.0.0.1:8000/ui) to access the web interface.
 
 ## Project Structure
 
 ```
 journal_ai/
 ├── src/
-│   ├── __init__.py
-│   ├── main.py          # FastAPI application
-│   ├── config.py        # Configuration settings
-│   ├── run.py           # Application entry point
-│   ├── todoist_client.py # Todoist API integration
-│   ├── ocr_factory.py   # OCR engine factory
-│   └── ocr/
-│       ├── __init__.py
-│       ├── base.py      # Base OCR interface
-│       └── gpt4o_ocr.py
+│   ├── app.py              # Main FastAPI application
+│   ├── config.py           # Core logging configuration
+│   ├── run.py              # Application entry point
+│   ├── auth_routes.py      # OAuth authentication routes
+│   ├── gmail/              # Gmail API integration
+│   │   ├── auth.py         # Gmail authentication
+│   │   ├── client.py       # Gmail API client
+│   │   ├── credentials.json # OAuth credentials (not in git)
+│   │   ├── downloads/      # Downloaded email data
+│   │   └── token.pkl       # OAuth token (not in git)
+│   ├── ocr/                # OCR processing
+│   │   ├── base.py         # Base OCR interface
+│   │   ├── config.py       # OCR configuration
+│   │   ├── gpt4o_ocr.py    # GPT-4o OCR implementation
+│   │   └── ocr_factory.py  # OCR engine factory
+│   ├── rag/                # RAG system components
+│   │   ├── embeddings.py   # Embedding service
+│   │   ├── email_vectorizer.py # Email processing pipeline
+│   │   ├── pinecone_client.py  # Pinecone vector database
+│   │   └── models/         # Cached TF-IDF models
+│   └── todoist/            # Todoist integration
+│       ├── config.py       # Todoist-specific configuration
+│       ├── sbert_client.py # SBERT embedding client
+│       ├── todoist_client.py # Todoist API client
+│       └── cache/          # SBERT embedding cache
 ├── static/
-│   └── index.html       # Web UI
-├── requirements.txt     # Python dependencies
-└── .env                 # Environment variables
+│   └── index.html          # Web UI
+├── test/                   # Test suite
+│   ├── test_basic.py       # Basic functionality tests
+│   └── test_duplicate_detection.py # Comprehensive SBERT tests
+├── uploads/                # Uploaded images
+└── requirements.txt        # Python dependencies
 ```
 
-## Endpoints
+## Core Features
 
-- `/` - Returns system status as JSON.
-- `/ui` - Opens the Journal AI web UI for image upload.
-- `/upload-image` - Accepts image uploads (POST).
-- `/upload-to-todoist` - Uploads extracted tasks to Todoist (POST).
-- `/config` - Returns application configuration (GET).
+### 1. Image OCR Processing
+- Upload images through web interface
+- GPT-4o powered text extraction
+- Structured task identification
+- Category-based organization (Day/Week/Month)
+
+### 2. Gmail RAG System
+- OAuth-based Gmail authentication
+- Email fetching with date filtering
+- Content cleaning (HTML removal, URL shortening)
+- Dual embedding generation (dense + sparse)
+- Pinecone vector storage with duplicate prevention
+- Semantic search capabilities
+
+### 3. Todoist Integration
+- Intelligent duplicate detection using SBERT
+- Semantic similarity analysis
+- Automatic task creation with confidence scoring
+- Fallback to simple text comparison when needed
+
+### 4. SBERT Intelligence
+- Sentence transformer embeddings (all-MiniLM-L6-v2)
+- Persistent caching for performance
+- Configurable similarity thresholds
+- Comprehensive similarity matrix logging
+
+## API Endpoints
+
+### Core Application
+- `GET /` - System status
+- `GET /ui` - Web interface
+- `GET /config` - Application configuration
+
+### Authentication
+- `GET /auth/google` - Initiate Gmail OAuth
+- `GET /auth/google/callback` - OAuth callback
+- `POST /auth/logout` - Clear authentication
+- `GET /auth/status` - Check auth status
+
+### OCR & Tasks
+- `POST /upload-image` - Upload image for OCR processing
+- `POST /upload-to-todoist` - Create Todoist tasks from OCR data
+
+### Gmail & RAG
+- `POST /gmail/fetch-data` - Fetch and process Gmail data
 
 ## Configuration
 
-The application can be configured by modifying `src/config.py`:
+### OCR Settings (`src/ocr/config.py`)
+- `OCR_ENGINE` - OCR engine selection (default: "GPT4oOCRAdapter")
 
-- `OCR_ENGINE` - Which OCR engine to use (e.g., "GPT4oOCRAdapter")
-- `TASK_CONFIDENCE_THRESHOLD` - Confidence threshold for task review (0.0-1.0, default: 0.9)
-- `SBERT_ENABLED` - Whether to use SBERT for intelligent duplicate detection (default: True)
-- `SBERT_MODEL` - SBERT model to use (default: "all-MiniLM-L6-v2")
-- `SBERT_SIMILARITY_THRESHOLD` - Threshold for considering tasks as duplicates (0.0-1.0, default: 0.85)
-- `SBERT_CACHE_FILE` - File path for persistent embedding cache (default: "embeddings_cache.pkl")
-- `LOG_LEVEL` - Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL, default: "INFO")
-- `LOG_FILE` - Optional file path for log output (None for console only, default: None)
+### Todoist Settings (`src/todoist/config.py`)
+- `TASK_CONFIDENCE_THRESHOLD` - Task review threshold (0.0-1.0, default: 0.9)
+- `SBERT_ENABLED` - Enable semantic duplicate detection (default: True)
+- `SBERT_MODEL` - Sentence transformer model (default: "all-MiniLM-L6-v2")
+- `SBERT_SIMILARITY_THRESHOLD` - Duplicate detection threshold (0.0-1.0, default: 0.8)
+- `SBERT_CACHE_FILE` - Embedding cache path (default: "cache/embeddings_cache.pkl")
 
-### Logging Configuration
+### Core Settings (`src/config.py`)
+- `LOG_LEVEL` - Logging level (default: "DEBUG")
+- `LOG_FILE` - Log file path (default: None for console)
 
-The application uses Python's logging module with configurable levels. When `LOG_LEVEL` is set to "DEBUG", the system will display:
+## Testing
 
-- Detailed similarity matrices between new and existing tasks
-- Summary tables showing duplicate detection results  
-- Step-by-step processing information
+Run the comprehensive test suite:
 
-Example debug output includes similarity tables like:
+```bash
+# Install pytest
+pip install pytest
+
+# Run all tests
+python -m pytest test/ -v
+
+# Run specific test files
+python -m pytest test/test_basic.py -v
+python -m pytest test/test_duplicate_detection.py -v
 ```
-=== SIMILARITY MATRIX ===
-New Task                       | Check emails         | Complete project set... | 
-Check emails!                  | 0.813                | 0.048                | 
-Setup project                  | -0.000               | 0.879*               | 
-* = Above similarity threshold (0.85)
-```
 
-4. Visit [http://127.0.0.1:8000/ui](http://127.0.0.1:8000/ui) in your browser to use the Journal AI UI.
+**Test Coverage:**
+- **Basic Setup** (3 tests): Configuration, imports, file structure
+- **Duplicate Detection** (20 tests): TodoistClient and SBERTClient functionality
+  - SBERT initialization and fallback behavior
+  - Semantic similarity analysis
+  - API integration testing
+  - Cache management
+  - Mock response handling
+
+## Development Notes
+
+### File Organization
+- Modular package structure with clear separation of concerns
+- Configuration files co-located with related functionality  
+- Automatic cache directory creation and management
+- Comprehensive `.gitignore` for temporary files
+
+### Security
+- OAuth tokens stored in package directories (excluded from git)
+- Environment variable configuration
+- Secure credential handling
+- API key management
+
+### Performance
+- Intelligent caching for embeddings and models
+- Batch processing for vector operations
+- Efficient duplicate detection algorithms
+- Minimal memory footprint for large datasets
+
+## Troubleshooting
+
+### Common Issues
+1. **Import Errors**: Ensure virtual environment is activated and dependencies installed
+2. **OAuth Failures**: Check `credentials.json` path and redirect URI configuration
+3. **API Errors**: Verify API keys in `.env` file
+4. **Cache Issues**: Delete cache files in `src/todoist/cache/` and `src/rag/models/`
+
+### Debug Mode
+Set `LOG_LEVEL="DEBUG"` to see detailed processing information including:
+- Similarity matrices for duplicate detection
+- Email processing steps
+- Vector generation and storage details
+- API call traces

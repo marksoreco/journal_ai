@@ -1,8 +1,8 @@
 import logging
 from typing import Dict, Type
 from typing import Optional
-from .ocr.base import BaseOCR
-from .config import OCR_ENGINE, TASK_CONFIDENCE_THRESHOLD
+from .base import BaseOCR
+from .config import OCR_ENGINE
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ class OCRFactory:
     def _register_engines(self):
         """Register all available OCR engines"""
         try:
-            from .ocr.gpt4o_ocr import GPT4oOCRAdapter
+            from .gpt4o_ocr import GPT4oOCRAdapter
             self._engines["GPT4oOCRAdapter"] = GPT4oOCRAdapter
         except ImportError:
             pass  # Engine not available

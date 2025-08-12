@@ -6,17 +6,15 @@ from fastapi.responses import PlainTextResponse, FileResponse, JSONResponse
 from fastapi import UploadFile, File, HTTPException, Form
 from typing import List
 import os
-from .config import OCR_ENGINE
-from .ocr.base import BaseOCR
-import importlib
 from dotenv import load_dotenv
-from .todoist_client import TodoistClient
-from .ocr_factory import OCRFactory
+from .todoist.todoist_client import TodoistClient
+from .ocr.ocr_factory import OCRFactory
 from .auth_routes import router as auth_router
 from .gmail.auth import get_gmail_service
 from .gmail.client import GmailClient
 from datetime import datetime
 from pydantic import BaseModel
+from .rag.email_vectorizer import EmailVectorizer
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
@@ -47,7 +45,7 @@ def system_status():
 @app.get("/config", response_class=JSONResponse)
 def get_config():
     """Get application configuration for the frontend"""
-    from .config import TASK_CONFIDENCE_THRESHOLD
+    from .todoist.config import TASK_CONFIDENCE_THRESHOLD
     return {
         "task_confidence_threshold": TASK_CONFIDENCE_THRESHOLD
     }
@@ -161,9 +159,10 @@ async def fetch_gmail_data(
         # Create filename with date format
         filename = f"gmail_since_{request.since_date}.json"
         
-        # Save to project root
-        project_root = os.path.dirname(os.path.dirname(__file__))
-        filepath = os.path.join(project_root, filename)
+        # Save to gmail downloads directory
+        downloads_dir = os.path.join(os.path.dirname(__file__), "gmail", "downloads")
+        os.makedirs(downloads_dir, exist_ok=True)
+        filepath = os.path.join(downloads_dir, filename)
         
         # Write JSON file
         with open(filepath, 'w', encoding='utf-8') as f:
@@ -177,12 +176,25 @@ async def fetch_gmail_data(
         
         logger.info(f"Successfully saved {len(emails_data)} emails to {filepath}")
         
+        # Upload to Pinecone vector database
+        vectorizer_results = {}
+        try:
+            logger.info("Starting Pinecone vectorization and upload")
+            vectorizer = EmailVectorizer()
+            vectorizer_results = vectorizer.process_and_store_emails(emails)
+            logger.info(f"Pinecone upload results: {vectorizer_results}")
+        except Exception as vec_error:
+            logger.error(f"Error uploading to Pinecone: {str(vec_error)}")
+            # Continue without failing the entire request
+            vectorizer_results = {"error": str(vec_error)}
+        
         return {
             "message": f"Successfully fetched {len(emails_data)} emails and saved to {filename}",
             "filename": filename,
             "total_emails": len(emails_data),
             "since_date": request.since_date,
-            "limit": request.limit
+            "limit": request.limit,
+            "pinecone_upload": vectorizer_results
         }
         
     except ValueError as e:

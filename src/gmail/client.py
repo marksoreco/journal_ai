@@ -118,9 +118,11 @@ class GmailClient:
         # Replace URLs with placeholders or shortened versions
         cleaned_text = re.sub(url_pattern, replace_url, text, flags=re.IGNORECASE)
         
-        # Clean up excessive whitespace that might result from URL removal
-        cleaned_text = re.sub(r'\n\s*\n\s*\n+', '\n\n', cleaned_text)  # Multiple blank lines
-        cleaned_text = re.sub(r' {3,}', ' ', cleaned_text)  # Multiple spaces
+        # Replace line breaks with spaces
+        cleaned_text = cleaned_text.replace('\n', ' ').replace('\r', ' ')
+        
+        # Clean up excessive whitespace that might result from URL removal and line break replacement
+        cleaned_text = re.sub(r' {2,}', ' ', cleaned_text)  # Multiple spaces to single space
         cleaned_text = cleaned_text.strip()
         
         # If HTML was removed and result is empty or mostly whitespace, use placeholder

@@ -33,13 +33,13 @@ async def auth_google(t: str = None):
         logger.info(f"OAuth initiation requested. Timestamp: {t}")
         
         # Force clear any existing tokens to ensure fresh flow
-        token_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "token.pickle")
+        token_path = os.path.join(os.path.dirname(__file__), "gmail", "token.pkl")
         if os.path.exists(token_path):
             os.remove(token_path)
             logger.info("Removed existing token file for fresh OAuth flow")
         
         # Use credentials path from env or fallback to default
-        credentials_file = GOOGLE_CREDENTIALS_PATH or 'credentials.json'
+        credentials_file = GOOGLE_CREDENTIALS_PATH or os.path.join(os.path.dirname(__file__), 'gmail', 'credentials.json')
         flow = InstalledAppFlow.from_client_secrets_file(
             credentials_file,
             scopes=OAUTH_SCOPES,
@@ -51,7 +51,7 @@ async def auth_google(t: str = None):
             prompt='consent'  # Force consent screen to appear
         )
         # Store state in session or DB for verification (simplified here)
-        state_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "state.txt")
+        state_file = os.path.join(os.path.dirname(__file__), "gmail", "state.txt")
         with open(state_file, 'w') as f:
             f.write(state)
         logger.info(f"OAuth flow initiated. Redirecting to: {auth_url}")
@@ -64,7 +64,7 @@ async def auth_google(t: str = None):
 async def auth_google_callback(code: str, state: str):
     try:
         # Verify state (prevent CSRF; simplified here)
-        state_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "state.txt")
+        state_file = os.path.join(os.path.dirname(__file__), "gmail", "state.txt")
         with open(state_file, 'r') as f:
             saved_state = f.read()
         if state != saved_state:
@@ -80,18 +80,18 @@ async def auth_google_callback(code: str, state: str):
         creds = flow.credentials
         
         # Save credentials
-        token_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "token.pickle")
+        token_path = os.path.join(os.path.dirname(__file__), "gmail", "token.pkl")
         with open(token_path, 'wb') as token:
             pickle.dump(creds, token)
         
         # Remove logout lock file if it exists
-        lock_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logout.lock")
+        lock_file = os.path.join(os.path.dirname(__file__), "gmail", "logout.lock")
         if os.path.exists(lock_file):
             os.remove(lock_file)
             logger.info("Removed logout lock file after successful login")
         
         # Clean up state
-        state_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "state.txt")
+        state_file = os.path.join(os.path.dirname(__file__), "gmail", "state.txt")
         if os.path.exists(state_file):
             os.remove(state_file)
         
@@ -105,11 +105,10 @@ async def auth_google_callback(code: str, state: str):
 async def logout():
     """Logout user by clearing stored credentials"""
     try:
-        project_root = os.path.dirname(os.path.dirname(__file__))
-        token_path = os.path.join(project_root, "token.pickle")
+        token_path = os.path.join(os.path.dirname(__file__), "gmail", "token.pkl")
         logger.info(f"Logout requested. Looking for token file at: {token_path}")
         
-        # Remove token.pickle file
+        # Remove token.pkl file
         if os.path.exists(token_path):
             try:
                 os.remove(token_path)
@@ -134,7 +133,7 @@ async def logout():
             logger.info("Token file not found")
         
         # Create a lock file to prevent token recreation during logout
-        lock_file = os.path.join(project_root, "logout.lock")
+        lock_file = os.path.join(os.path.dirname(__file__), "gmail", "logout.lock")
         try:
             with open(lock_file, 'w') as f:
                 f.write(str(time.time()))
@@ -159,7 +158,7 @@ async def logout():
             logger.error(f"Error creating lock file: {e}")
         
         # Remove state.txt file
-        state_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "state.txt")
+        state_file = os.path.join(os.path.dirname(__file__), "gmail", "state.txt")
         if os.path.exists(state_file):
             try:
                 os.remove(state_file)
@@ -179,7 +178,7 @@ async def logout():
 async def auth_status():
     """Check if Gmail authentication is valid without requiring authentication"""
     try:
-        token_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "token.pickle")
+        token_path = os.path.join(os.path.dirname(__file__), "gmail", "token.pkl")
         logger.info(f"Auth status check requested. Looking for token at: {token_path}")
         
         # Check if token file exists and is valid
