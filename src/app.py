@@ -107,10 +107,10 @@ async def upload_image(
         f.write(await file.read())
 
     # OCR processing
-    logger.info("Starting OCR processing")
+    logger.info(f"Starting OCR processing with category: {category}")
     ocr_engine = ocr_factory.get_current_engine()
-    ocr_text = ocr_engine.extract_text(file_path)
-    logger.info("OCR processing completed successfully")
+    ocr_text = ocr_engine.extract_text(file_path, category)
+    logger.info(f"OCR processing completed successfully for category: {category}")
     
     return {
         "filename": file.filename,
