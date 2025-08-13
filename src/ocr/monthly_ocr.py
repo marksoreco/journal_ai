@@ -5,6 +5,8 @@ import os
 import json
 from openai import OpenAI
 from openai.types.chat import ChatCompletionToolParam
+import dateparser
+from datetime import datetime
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
@@ -16,6 +18,89 @@ class MonthlyOCRAdapter(BaseOCR):
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable is required")
         self.client = OpenAI(api_key=api_key)
+    
+    def _parse_month_value(self, month_str: str) -> dict:
+        """
+        Parse various month/year formats using dateparser.
+        
+        Handles formats like:
+        - "Sept 2023", "March 2024" 
+        - "3/2023", "03/2023"
+        - "3/23", "03/23" (assumes 20xx for years ≤30, 19xx for years >30)
+        - "March" (defaults to current year)
+        
+        Returns:
+            dict with 'month', 'year', and 'confidence' fields
+        """
+        try:
+            if not month_str or not month_str.strip():
+                # Default to current month/year
+                now = datetime.now()
+                return {
+                    "month": now.strftime("%B"),
+                    "year": now.year,
+                    "confidence": 0.5
+                }
+            
+            month_str = month_str.strip()
+            
+            # Try to parse with dateparser (handles most formats automatically)
+            parsed_date = dateparser.parse(month_str, settings={
+                'PREFER_DATES_FROM': 'past',  # For ambiguous cases
+                'DATE_ORDER': 'MDY'  # Month-Day-Year preference
+            })
+            
+            if parsed_date:
+                return {
+                    "month": parsed_date.strftime("%B"),  # Full month name
+                    "year": parsed_date.year,
+                    "confidence": 0.9
+                }
+            
+            # Fallback: try to handle MM/YY format manually (dateparser sometimes struggles with this)
+            if '/' in month_str and len(month_str.split('/')) == 2:
+                parts = month_str.split('/')
+                try:
+                    month_num = int(parts[0])
+                    year_part = int(parts[1])
+                    
+                    if 1 <= month_num <= 12:
+                        # Handle 2-digit years
+                        if year_part < 100:
+                            year = 2000 + year_part if year_part <= 30 else 1900 + year_part
+                        else:
+                            year = year_part
+                        
+                        month_names = [
+                            "January", "February", "March", "April", "May", "June",
+                            "July", "August", "September", "October", "November", "December"
+                        ]
+                        
+                        return {
+                            "month": month_names[month_num - 1],
+                            "year": year,
+                            "confidence": 0.8
+                        }
+                except ValueError:
+                    pass
+            
+            # If nothing else worked, default to current date
+            now = datetime.now()
+            return {
+                "month": now.strftime("%B"),
+                "year": now.year,
+                "confidence": 0.3  # Low confidence since we couldn't parse
+            }
+            
+        except Exception as e:
+            logger.warning(f"Error parsing month value '{month_str}': {str(e)}")
+            # Default to current month/year
+            now = datetime.now()
+            return {
+                "month": now.strftime("%B"),
+                "year": now.year,
+                "confidence": 0.3
+            }
 
     def extract_text(self, image_path: str, category: str = "Month") -> str:
         logger.info(f"Starting monthly page OCR extraction for image: {image_path}")
@@ -34,9 +119,9 @@ For monthly pages:
 - "MONTH": The month and year being planned.
 - "HABIT": Habit to establish or maintain this month.
 - "THEME": Main theme or focus area for the month.
-- "CALENDAR": Section in calendar format with days of the month and the corresponding events.
+- "CALENDAR": Section in calendar format with days of the month and the corresponding events.  Note the text will be just below and slightly to the left of the day number.
 - "PREPARE - PRIORITY": Important items to work on this month.
-- "MONTHLY CHECK-IN": Wellness ratings for different categories, including relationships, physical, spiritual, work/vocation, personal growth, play and peace.
+- "MONTHLY CHECK-IN": Wellness ratings for different categories, including relationships, physical, spiritual, work/vocation, personal growth, play and peace. These are values between 1 and 10.
 - "ONE CHANGE I CAN MAKE THIS MONTH THAT WILL HAVE THE BIGGEST IMPACT": A single change that can be made this month that will have the biggest impact.
 - "ONE QUESTION I'D LIKE TO ANSWER THIS MONTH": A single question that I'd like to answer this month.
 - "REFLECT": Page section with reflections on the month.  Includes subsections for "BIGGEST ACCOMPLISHMENTS", "RELATIONSHIPS I'M GRATEFUL FOR", and "GREATEST INSIGHT GAINED".
@@ -45,14 +130,12 @@ Your job is to:
 - Identify each section based on layout or header.
 - Extract the text content written under each section.
 - Return a JSON object with a key for each section and its content.
-- If a section is not present or has no content, leave it blank or null.
+- If a section is not present or has no content, include it in the json output with an empty string or empty array.
+- If no text content is present for a line under a section, do not include that line in the json output.
 
-NOTE for the MONTHLY CHECK-IN:
-- Under the "MONTHLY CHECK-IN" heading, there is a row for each category.
-- For each category, there is a scale in the form of a horizontal line with a short vertical line in the middle.
-- The user has placed an 'X' somewhere along the scale to indicate their rating for the category.
-- The rating is a number between -5 and +5, where -5 is the left end of the line, 0 is the location of the vertical bar in the middle of the line, and +5 is the right end of the line.
-- You are to estimate the rating based on the location of the 'X' that the user has placed on the line.
+IMPORTANT: For the "MONTHLY CHECK-IN" section, go one-by-one through each category and get the numeric value that is located directly to the right of the category name.  IGNORE ANY VALUES LOCATED BELOW OR ABOVE THE CATEGORY NAME'S VERTICAL LOCATION IN THE IMAGE. The values may be located at different distances from the category name but will always be directly to the right of the category name.
+
+For the "CALENDAR" section, double-check and triple-check that the text that was identified is located just below and slightly to the left of the day number that you associated it with.  If it is not then reprocess the image and try again.
 
 IMPORTANT: For each extracted item, provide a realistic confidence score (0.0 to 1.0) based on:
 - Text clarity and readability (clear text = higher confidence)
@@ -73,7 +156,8 @@ Here is an example of the expected output format for a Monk Manual monthly page:
 
 {
     "month": {
-        "value": "March 2024",
+        "month": "March",
+        "year": 2024,
         "confidence": 0.98
     },
     "habit": {
@@ -105,10 +189,10 @@ Here is an example of the expected output format for a Monk Manual monthly page:
     },
     "monthly_check_in": {
         "relationships": 1,
-        "physical": -2,
+        "physical": 9,
         "spiritual": 3,
         "work/vocation": 4,
-        "personal growth": -1,
+        "personal growth": 6,
         "play": 5,
         "peace": 2
     },
@@ -150,10 +234,11 @@ Here is an example of the expected output format for a Monk Manual monthly page:
                         "month": {
                             "type": "object",
                             "properties": {
-                                "value": { "type": "string" },
+                                "month": { "type": "string" },
+                                "year": { "type": "integer" },
                                 "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
                             },
-                            "required": ["value", "confidence"],
+                            "required": ["month", "year", "confidence"],
                             "description": "The month and year being planned"
                         },
                         "habit": {
@@ -236,15 +321,15 @@ Here is an example of the expected output format for a Monk Manual monthly page:
                         "monthly_check_in": {
                             "type": "object",
                             "properties": {
-                                "relationships": { "type": "integer", "minimum": -5, "maximum": 5 },
-                                "physical": { "type": "integer", "minimum": -5, "maximum": 5 },
-                                "spiritual": { "type": "integer", "minimum": -5, "maximum": 5 },
-                                "work/vocation": { "type": "integer", "minimum": -5, "maximum": 5 },
-                                "personal growth": { "type": "integer", "minimum": -5, "maximum": 5 },
-                                "play": { "type": "integer", "minimum": -5, "maximum": 5 },
-                                "peace": { "type": "integer", "minimum": -5, "maximum": 5 }
+                                "relationships": { "type": "integer", "minimum": 1, "maximum": 10 },
+                                "physical": { "type": "integer", "minimum": 1, "maximum": 10 },
+                                "spiritual": { "type": "integer", "minimum": 1, "maximum": 10 },
+                                "work/vocation": { "type": "integer", "minimum": 1, "maximum": 10 },
+                                "personal growth": { "type": "integer", "minimum": 1, "maximum": 10 },
+                                "play": { "type": "integer", "minimum": 1, "maximum": 10 },
+                                "peace": { "type": "integer", "minimum": 1, "maximum": 10 }
                             },
-                            "description": "Wellness ratings from -5 to +5 for different life categories"
+                            "description": "Wellness ratings from 1 to 10 for different life categories"
                         },
                         "one_change_i_can_make_this_month_that_will_have_the_biggest_impact": {
                             "type": "object",
@@ -339,7 +424,35 @@ Here is an example of the expected output format for a Monk Manual monthly page:
                 tool_call = response.choices[0].message.tool_calls[0]
                 logger.debug("GPT-4o returned function call response")
                 try:
-                    result = json.dumps(json.loads(tool_call.function.arguments), indent=2)
+                    # Parse the OCR result
+                    ocr_data = json.loads(tool_call.function.arguments)
+                    
+                    # Post-process the month field if it exists
+                    if 'month' in ocr_data and ocr_data['month']:
+                        # Handle both old format (with 'value' field) and new format (with separate fields)
+                        if isinstance(ocr_data['month'], dict):
+                            if 'value' in ocr_data['month']:
+                                # Old format: parse the value field
+                                month_str = ocr_data['month']['value']
+                                parsed_month = self._parse_month_value(month_str)
+                                # Update to new format
+                                ocr_data['month'] = {
+                                    "month": parsed_month['month'],
+                                    "year": parsed_month['year'],
+                                    "confidence": min(ocr_data['month'].get('confidence', 0.5), parsed_month['confidence'])
+                                }
+                            elif 'month' in ocr_data['month'] and 'year' in ocr_data['month']:
+                                # New format: validate and potentially re-parse if confidence is low
+                                if ocr_data['month'].get('confidence', 0) < 0.7:
+                                    month_str = f"{ocr_data['month']['month']} {ocr_data['month']['year']}"
+                                    parsed_month = self._parse_month_value(month_str)
+                                    ocr_data['month'].update(parsed_month)
+                        else:
+                            # Handle case where month is just a string
+                            parsed_month = self._parse_month_value(str(ocr_data['month']))
+                            ocr_data['month'] = parsed_month
+                    
+                    result = json.dumps(ocr_data, indent=2)
                     logger.info("Monthly page OCR extraction completed successfully")
                     return result
                 except json.JSONDecodeError:

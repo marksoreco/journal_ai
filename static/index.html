@@ -407,7 +407,68 @@
         
         .get-data-btn:disabled {
             background: #444;
-            cursor: not-allowed;
+        }
+
+        .monthly-checkin-form {
+            display: grid;
+            gap: 0.8rem;
+            margin: 1rem 0;
+        }
+
+        .monthly-checkin-form .form-group {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .monthly-checkin-form .form-group label {
+            min-width: 120px;
+            text-align: right;
+            color: #f3f3f3;
+            font-size: 0.9rem;
+        }
+
+        .monthly-checkin-form .form-group input {
+            flex: 1;
+            max-width: 80px;
+        }
+
+        .month-verification-form {
+            display: grid;
+            gap: 0.8rem;
+            margin: 1rem 0;
+        }
+
+        .month-verification-form .form-group {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .month-verification-form .form-group label {
+            min-width: 80px;
+            text-align: right;
+            color: #f3f3f3;
+            font-size: 0.9rem;
+        }
+
+        .month-verification-form select,
+        .month-verification-form input {
+            flex: 1;
+            padding: 0.4rem;
+            border: 1px solid #444;
+            border-radius: 4px;
+            background: #181a1b;
+            color: #f3f3f3;
+            font-size: 0.8rem;
+        }
+
+        .month-verification-form select:focus,
+        .month-verification-form input:focus {
+            outline: none;
+            border-color: #4f8cff;
         }
         
         .gmail-message {
@@ -482,6 +543,83 @@
             <div class="modal-buttons">
                 <button id="cancelAdd" class="cancel-btn">Cancel</button>
                 <button id="confirmAdd" class="confirm-btn">Confirm Add to Todoist</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Month Verification Modal -->
+    <div id="monthVerificationModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>Verify Month & Year</h3>
+            <p>Please verify or correct the month and year for this journal page:</p>
+            <div class="month-verification-form">
+                <div class="form-group">
+                    <label for="monthSelect">Month:</label>
+                    <select id="monthSelect">
+                        <option value="January">January</option>
+                        <option value="February">February</option>
+                        <option value="March">March</option>
+                        <option value="April">April</option>
+                        <option value="May">May</option>
+                        <option value="June">June</option>
+                        <option value="July">July</option>
+                        <option value="August">August</option>
+                        <option value="September">September</option>
+                        <option value="October">October</option>
+                        <option value="November">November</option>
+                        <option value="December">December</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="yearInput">Year:</label>
+                    <input type="number" id="yearInput" min="2020" max="2030" />
+                </div>
+            </div>
+            <div class="modal-buttons">
+                <button id="cancelMonthVerification" class="cancel-btn">Cancel</button>
+                <button id="submitMonthVerification" class="confirm-btn">Continue</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Monthly Check-In Values Modal -->
+    <div id="monthlyCheckInModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>Verify/Edit Monthly Check-In Values</h3>
+            <p>Please enter your wellness ratings (1-10) for each category:</p>
+            <div class="monthly-checkin-form">
+                <div class="form-group">
+                    <label for="relationships">Relationships:</label>
+                    <input type="number" id="relationships" min="1" max="10" />
+                </div>
+                <div class="form-group">
+                    <label for="physical">Physical:</label>
+                    <input type="number" id="physical" min="1" max="10" />
+                </div>
+                <div class="form-group">
+                    <label for="spiritual">Spiritual:</label>
+                    <input type="number" id="spiritual" min="1" max="10" />
+                </div>
+                <div class="form-group">
+                    <label for="workVocation">Work/Vocation:</label>
+                    <input type="number" id="workVocation" min="1" max="10" />
+                </div>
+                <div class="form-group">
+                    <label for="personalGrowth">Personal Growth:</label>
+                    <input type="number" id="personalGrowth" min="1" max="10" />
+                </div>
+                <div class="form-group">
+                    <label for="play">Play:</label>
+                    <input type="number" id="play" min="1" max="10" />
+                </div>
+                <div class="form-group">
+                    <label for="peace">Peace:</label>
+                    <input type="number" id="peace" min="1" max="10" />
+                </div>
+            </div>
+            <div class="modal-buttons">
+                <button id="cancelMonthlyCheckIn" class="cancel-btn">Cancel</button>
+                <button id="submitMonthlyCheckIn" class="confirm-btn">Submit</button>
             </div>
         </div>
     </div>
@@ -909,6 +1047,11 @@
                         ocrResult.textContent = 'No text detected.';
                         ocrResult.style.display = 'block';
                     }
+
+                    // Show Month Verification modal for monthly uploads
+                    if (category === 'Month') {
+                        showMonthVerificationModal(result.ocr_text);
+                    }
                 } else {
                     if (response.status === 401) {
                         // Redirect to authentication if unauthorized
@@ -1148,6 +1291,179 @@
             }
             
             getDataBtn.disabled = false;
+        });
+
+        // Global variable to store OCR data between modals
+        let currentOcrData = null;
+
+        // Month Verification Modal Functions
+        function showMonthVerificationModal(ocrData) {
+            currentOcrData = ocrData;
+            const modal = document.getElementById('monthVerificationModal');
+            
+            // Pre-fill month and year from OCR if available
+            try {
+                const parsedData = JSON.parse(ocrData);
+                if (parsedData.month && parsedData.month.month && parsedData.month.year) {
+                    // Backend has already parsed and normalized the month/year format
+                    document.getElementById('monthSelect').value = parsedData.month.month;
+                    document.getElementById('yearInput').value = parsedData.month.year;
+                } else {
+                    // Set to current month/year as fallback
+                    const now = new Date();
+                    const currentMonth = now.toLocaleString('default', { month: 'long' });
+                    document.getElementById('monthSelect').value = currentMonth;
+                    document.getElementById('yearInput').value = now.getFullYear();
+                }
+            } catch (e) {
+                console.log('Could not pre-fill month/year from OCR data');
+                // Set to current month/year as fallback
+                const now = new Date();
+                const currentMonth = now.toLocaleString('default', { month: 'long' });
+                document.getElementById('monthSelect').value = currentMonth;
+                document.getElementById('yearInput').value = now.getFullYear();
+            }
+            
+            modal.style.display = 'block';
+        }
+
+        function hideMonthVerificationModal() {
+            const modal = document.getElementById('monthVerificationModal');
+            modal.style.display = 'none';
+        }
+
+        function updateOcrDataWithMonth() {
+            const selectedMonth = document.getElementById('monthSelect').value;
+            const selectedYear = parseInt(document.getElementById('yearInput').value);
+
+            // Update the currentOcrData with corrected month in new format
+            try {
+                const parsedData = JSON.parse(currentOcrData);
+                if (!parsedData.month) {
+                    parsedData.month = {};
+                }
+                parsedData.month.month = selectedMonth;
+                parsedData.month.year = selectedYear;
+                parsedData.month.confidence = 1.0; // High confidence for manually verified value
+                
+                currentOcrData = JSON.stringify(parsedData, null, 2);
+                
+                // Update lastOcrData as well
+                lastOcrData = currentOcrData;
+                
+                // Update the displayed OCR result
+                ocrResult.textContent = lastOcrData;
+                
+            } catch (e) {
+                console.error('Error updating OCR data with month:', e);
+            }
+        }
+
+        // Monthly Check-In Modal Functions
+        function showMonthlyCheckInModal() {
+            const modal = document.getElementById('monthlyCheckInModal');
+            
+            // Pre-fill values from OCR if available
+            try {
+                const parsedData = JSON.parse(currentOcrData);
+                if (parsedData.monthly_check_in) {
+                    const monthlyData = parsedData.monthly_check_in;
+                    
+                    if (monthlyData.relationships) document.getElementById('relationships').value = monthlyData.relationships;
+                    if (monthlyData.physical) document.getElementById('physical').value = monthlyData.physical;
+                    if (monthlyData.spiritual) document.getElementById('spiritual').value = monthlyData.spiritual;
+                    if (monthlyData['work/vocation']) document.getElementById('workVocation').value = monthlyData['work/vocation'];
+                    if (monthlyData['personal growth']) document.getElementById('personalGrowth').value = monthlyData['personal growth'];
+                    if (monthlyData.play) document.getElementById('play').value = monthlyData.play;
+                    if (monthlyData.peace) document.getElementById('peace').value = monthlyData.peace;
+                }
+            } catch (e) {
+                console.log('Could not pre-fill values from OCR data');
+            }
+            
+            modal.style.display = 'block';
+        }
+
+        function hideMonthlyCheckInModal() {
+            const modal = document.getElementById('monthlyCheckInModal');
+            modal.style.display = 'none';
+            
+            // Clear form values
+            document.getElementById('relationships').value = '';
+            document.getElementById('physical').value = '';
+            document.getElementById('spiritual').value = '';
+            document.getElementById('workVocation').value = '';
+            document.getElementById('personalGrowth').value = '';
+            document.getElementById('play').value = '';
+            document.getElementById('peace').value = '';
+        }
+
+        function updateOcrDataWithMonthlyCheckIn() {
+            // Get values from form
+            const monthlyCheckInValues = {
+                relationships: parseInt(document.getElementById('relationships').value) || null,
+                physical: parseInt(document.getElementById('physical').value) || null,
+                spiritual: parseInt(document.getElementById('spiritual').value) || null,
+                'work/vocation': parseInt(document.getElementById('workVocation').value) || null,
+                'personal growth': parseInt(document.getElementById('personalGrowth').value) || null,
+                play: parseInt(document.getElementById('play').value) || null,
+                peace: parseInt(document.getElementById('peace').value) || null
+            };
+
+            // Remove null values
+            Object.keys(monthlyCheckInValues).forEach(key => {
+                if (monthlyCheckInValues[key] === null) {
+                    delete monthlyCheckInValues[key];
+                }
+            });
+
+            // Update the currentOcrData with manual values
+            try {
+                const parsedData = JSON.parse(currentOcrData);
+                parsedData.monthly_check_in = monthlyCheckInValues;
+                currentOcrData = JSON.stringify(parsedData, null, 2);
+                lastOcrData = currentOcrData; // Update lastOcrData as well
+                
+                // Update the displayed OCR result
+                ocrResult.textContent = lastOcrData;
+                
+                message.textContent = 'Monthly Check-In values updated!';
+                setTimeout(() => {
+                    message.textContent = '';
+                }, 2000);
+            } catch (e) {
+                console.error('Error updating OCR data with monthly check-in values:', e);
+                message.textContent = 'Error updating values';
+            }
+        }
+
+        // Month Verification Modal event listeners
+        document.getElementById('cancelMonthVerification').addEventListener('click', hideMonthVerificationModal);
+        document.getElementById('submitMonthVerification').addEventListener('click', () => {
+            updateOcrDataWithMonth();
+            hideMonthVerificationModal();
+            showMonthlyCheckInModal(); // Continue to Monthly Check-In modal
+        });
+
+        // Close month verification modal when clicking outside
+        document.getElementById('monthVerificationModal').addEventListener('click', (e) => {
+            if (e.target.id === 'monthVerificationModal') {
+                hideMonthVerificationModal();
+            }
+        });
+
+        // Monthly Check-In Modal event listeners
+        document.getElementById('cancelMonthlyCheckIn').addEventListener('click', hideMonthlyCheckInModal);
+        document.getElementById('submitMonthlyCheckIn').addEventListener('click', () => {
+            updateOcrDataWithMonthlyCheckIn();
+            hideMonthlyCheckInModal();
+        });
+
+        // Close modal when clicking outside
+        document.getElementById('monthlyCheckInModal').addEventListener('click', (e) => {
+            if (e.target.id === 'monthlyCheckInModal') {
+                hideMonthlyCheckInModal();
+            }
         });
         
         // Check authentication status on page load
