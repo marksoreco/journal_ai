@@ -492,6 +492,12 @@
         <div id="detectionStatus" style="margin-bottom: 1rem; text-align: center; color: #888; font-size: 0.9rem; display: none;">
             <span id="detectionText">Detecting page type...</span>
         </div>
+        <div style="margin-bottom: 1rem; text-align: center;">
+            <label style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; color: #b0b0b0; font-size: 0.9rem;">
+                <input type="checkbox" id="useAgent" style="margin: 0;">
+                Use AI Agent Workflow
+            </label>
+        </div>
         <button class="submit-btn" id="submitBtn" disabled>Submit</button>
         <button class="todoist-btn" id="todoistBtn" disabled>Add to Todoist</button>
         <div class="message" id="message"></div>
@@ -541,6 +547,21 @@
             <div class="modal-buttons">
                 <button id="cancelAdd" class="cancel-btn">Cancel</button>
                 <button id="confirmAdd" class="confirm-btn">Confirm Add to Todoist</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Todoist Upload Summary Modal -->
+    <div id="todoistSummaryModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>Todoist Upload Summary</h3>
+            <div style="text-align: center; margin: 2rem 0;">
+                <p id="todoistSummaryDetails" style="font-size: 0.9rem; color: #ccc; font-weight: normal; margin: 0;">
+                    <!-- Summary details will be populated here -->
+                </p>
+            </div>
+            <div class="modal-buttons">
+                <button id="closeTodoistSummary" class="confirm-btn">OK</button>
             </div>
         </div>
     </div>
@@ -625,27 +646,70 @@
     <!-- Page Type Confirmation Modal -->
     <div id="pageTypeConfirmModal" class="modal" style="display: none;">
         <div class="modal-content">
-            <h3>Confirm Page Type</h3>
-            <p>We detected this page as:</p>
-            <div style="text-align: center; margin: 1.5rem 0;">
-                <div style="font-size: 1.5rem; color: #4f8cff; font-weight: bold;" id="detectedPageType">Daily</div>
-                <div style="font-size: 0.8rem; color: #aaa; margin-top: 0.5rem; display: none;" id="detectedReasoning">
-                    Analysis in progress...
-                </div>
-            </div>
-            <div class="form-group" style="margin: 1.5rem 0;">
-                <label for="pageTypeSelect" style="display: block; margin-bottom: 0.5rem; color: #b0b0b0;">
-                    Or select a different page type:
-                </label>
-                <select id="pageTypeSelect" style="width: 100%; padding: 0.5rem; background: #181a1b; color: #f3f3f3; border: 1px solid #444; border-radius: 4px;">
-                    <option value="Daily">Daily</option>
-                    <option value="Weekly">Weekly</option>
-                    <option value="Monthly">Monthly</option>
-                </select>
+            <h3>Page Type</h3>
+            <div style="text-align: center; margin: 2rem 0;">
+                <p style="font-size: 0.9rem; color: #ccc; font-weight: normal; margin: 0;">
+                    Determined that this is a <span id="detectedPageType">Daily</span> page
+                </p>
             </div>
             <div class="modal-buttons">
                 <button id="cancelPageType" class="cancel-btn">Cancel</button>
-                <button id="confirmPageType" class="confirm-btn">Proceed</button>
+                <button id="confirmPageType" class="confirm-btn">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- OCR Results Summary Modal -->
+    <div id="ocrSummaryModal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 700px; max-height: 80vh;">
+            <h3 id="ocrSummaryTitle">Page Content Summary</h3>
+            <p style="font-size: 0.8rem; color: #aaa; margin: 0.5rem 0 1rem 0; font-weight: normal;">
+                Items in italics were detected with lower confidence. Close this dialog and click "Upload to Todoist" button to allow editing of these items prior to upload.
+            </p>
+            <div id="ocrSummaryContent" style="
+                max-height: 500px; 
+                overflow-y: auto; 
+                background: #1a1a1a; 
+                border: 1px solid #444; 
+                border-radius: 6px; 
+                padding: 1rem; 
+                margin: 1rem 0;
+                font-family: 'Segoe UI', Arial, sans-serif;
+                font-size: 0.9rem;
+                line-height: 1.4;
+                color: #f3f3f3;
+            ">
+                Loading extracted content...
+            </div>
+            <div class="modal-buttons">
+                <button id="closeOcrSummary" class="cancel-btn">Close</button>
+                <button id="confirmOcrSummary" class="confirm-btn">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Todoist Upload Confirmation Modal -->
+    <div id="todoistConfirmModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>Upload Tasks to Todoist?</h3>
+            <p>Would you like to upload the priority tasks and to-do items from this daily page to Todoist?</p>
+            <div id="taskPreview" style="
+                background: #2a2a2a; 
+                border: 1px solid #444; 
+                border-radius: 6px; 
+                padding: 1rem; 
+                margin: 1rem 0;
+                max-height: 200px;
+                overflow-y: auto;
+            ">
+                <div style="color: #f3f3f3; font-weight: bold; margin-bottom: 0.5rem;">Priority Tasks:</div>
+                <ul id="priorityTasksList" style="margin: 0 0 1rem 0; color: #ccc;"></ul>
+                <div style="color: #f3f3f3; font-weight: bold; margin-bottom: 0.5rem;">To-Do Tasks:</div>
+                <ul id="todoTasksList" style="margin: 0; color: #ccc;"></ul>
+            </div>
+            <div class="modal-buttons">
+                <button id="cancelTodoistUpload" class="cancel-btn">No, Skip</button>
+                <button id="confirmTodoistUpload" class="confirm-btn">Yes, Upload</button>
             </div>
         </div>
     </div>
@@ -665,6 +729,7 @@
         let reviewedTaskData = null;
         let confidenceThreshold = 0.8; // Default value
         let isDebugMode = false; // Track if logging is set to DEBUG
+        let isAgentWorkflow = false; // Track if we're in agent or manual workflow
 
         // Modal elements
         const confidenceModal = document.getElementById('confidenceModal');
@@ -1050,61 +1115,110 @@
             if (!selectedFile) return;
             submitBtn.disabled = true;
             todoistBtn.disabled = true;
-            message.textContent = 'Detecting page type...';
-            ocrResult.textContent = '';
-            document.getElementById('detectionStatus').style.display = 'block';
-            document.getElementById('detectionText').textContent = 'Analyzing page layout...';
             
-            // Step 1: Detect page type
-            const detectionFormData = new FormData();
-            detectionFormData.append('file', selectedFile);
+            const useAgentWorkflow = document.getElementById('useAgent').checked;
+            isAgentWorkflow = useAgentWorkflow;
             
-            try {
-                const detectionResponse = await fetch('/detect-page-type', {
-                    method: 'POST',
-                    body: detectionFormData
-                });
-                const detectionResult = await detectionResponse.json();
+            if (useAgentWorkflow) {
+                // Use LangChain Agent Workflow (original approach)
+                message.textContent = 'Starting AI Agent workflow...';
+                ocrResult.textContent = '';
+                document.getElementById('detectionStatus').style.display = 'block';
+                document.getElementById('detectionText').textContent = 'AI Agent processing...';
                 
-                if (!detectionResponse.ok) {
-                    if (detectionResponse.status === 401) {
+                const formData = new FormData();
+                formData.append('file', selectedFile);
+                
+                try {
+                    const response = await fetch('/process-image-with-agent', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        message.textContent = 'AI Agent processing complete!';
+                        document.getElementById('detectionText').textContent = 'Completed by AI Agent';
+                        
+                        // Show OCR summary in dialog
+                        showOcrSummaryDialog(result.ocr_data, result.page_type, result.response);
+                        todoistBtn.disabled = true; // Agent handles flow through dialogs
+                        
+                        submitBtn.disabled = false;
+                        return; // Prevent continuing to manual workflow
+                    } else {
+                        if (response.status === 401) {
+                            window.location.href = '/auth/google';
+                            return;
+                        }
+                        message.textContent = 'Error: ' + (result.detail || 'Agent processing failed.');
+                        ocrResult.textContent = '';
+                        ocrResult.style.display = 'none';
+                        document.getElementById('detectionStatus').style.display = 'none';
+                    }
+                } catch (err) {
+                    if (err.message && err.message.includes('401')) {
                         window.location.href = '/auth/google';
                         return;
                     }
-                    throw new Error(detectionResult.error || 'Page type detection failed');
+                    message.textContent = 'Error: AI Agent processing failed.';
+                    ocrResult.textContent = '';
+                    ocrResult.style.display = 'none';
+                    document.getElementById('detectionStatus').style.display = 'none';
                 }
                 
-                // Store detection result and show confirmation modal
-                currentDetectionResult = detectionResult;
-                showPageTypeConfirmationModal(detectionResult);
+                submitBtn.disabled = false;
+                return;
+            } else {
+                // Original workflow (non-agent)
+                message.textContent = 'Detecting page type...';
+                ocrResult.textContent = '';
+                document.getElementById('detectionStatus').style.display = 'block';
+                document.getElementById('detectionText').textContent = 'Analyzing page layout...';
                 
-            } catch (detectionError) {
-                console.error('Page type detection failed:', detectionError);
-                document.getElementById('detectionText').textContent = 'Detection failed, using Daily as default';
+                // Step 1: Detect page type
+                const detectionFormData = new FormData();
+                detectionFormData.append('file', selectedFile);
                 
-                // Create fallback detection result
-                currentDetectionResult = {
-                    page_type: 'Daily',
-                    reasoning: 'Detection failed, using Daily as fallback'
-                };
-                showPageTypeConfirmationModal(currentDetectionResult);
-            }
+                try {
+                    const detectionResponse = await fetch('/detect-page-type', {
+                        method: 'POST',
+                        body: detectionFormData
+                    });
+                    const detectionResult = await detectionResponse.json();
+                    
+                    if (!detectionResponse.ok) {
+                        if (detectionResponse.status === 401) {
+                            window.location.href = '/auth/google';
+                            return;
+                        }
+                        throw new Error(detectionResult.error || 'Page type detection failed');
+                    }
+                    
+                    // Store detection result and show confirmation modal
+                    currentDetectionResult = detectionResult;
+                    showPageTypeConfirmationModal(detectionResult);
+                    
+                } catch (detectionError) {
+                    console.error('Page type detection failed:', detectionError);
+                    document.getElementById('detectionText').textContent = 'Detection failed, using Daily as default';
+                    
+                    // Create fallback detection result
+                    currentDetectionResult = {
+                        page_type: 'Daily',
+                        reasoning: 'Detection failed, using Daily as fallback'
+                    };
+                    showPageTypeConfirmationModal(currentDetectionResult);
+                }
+            } // End of else block for manual workflow
         });
 
         // Function to show page type confirmation modal
         function showPageTypeConfirmationModal(detectionResult) {
+            // Set the detected page type in the simplified dialog
             document.getElementById('detectedPageType').textContent = detectionResult.page_type;
             
-            // Only show reasoning in DEBUG mode
-            const reasoningElement = document.getElementById('detectedReasoning');
-            if (isDebugMode) {
-                reasoningElement.textContent = detectionResult.reasoning || 'No reasoning provided';
-                reasoningElement.style.display = 'block';
-            } else {
-                reasoningElement.style.display = 'none';
-            }
-            
-            document.getElementById('pageTypeSelect').value = detectionResult.page_type;
+            // Show the modal
             document.getElementById('pageTypeConfirmModal').style.display = 'flex';
         }
 
@@ -1116,7 +1230,7 @@
                 `Using: ${selectedPageType} page`;
             message.textContent = 'Processing with selected page type...';
             
-            // Step 2: Process with selected page type
+            // Step 2: Process with selected page type (manual workflow only)
             const formData = new FormData();
             formData.append('file', selectedFile);
             formData.append('category', selectedPageType);
@@ -1133,18 +1247,13 @@
                     lastOcrData = result.ocr_text;
                     todoistBtn.disabled = false; // Re-enable Todoist button after successful upload
                     message.textContent = `Processing complete! (Used: ${selectedPageType})`;
-                    
-                    if (result.ocr_text) {
-                        ocrResult.textContent = result.ocr_text;
-                        ocrResult.style.display = 'block';
-                    } else {
-                        ocrResult.textContent = 'No text detected.';
-                        ocrResult.style.display = 'block';
-                    }
 
                     // Show Month Verification modal for monthly uploads
                     if (selectedPageType === 'Monthly') {
                         showMonthVerificationModal(result.ocr_text);
+                    } else {
+                        // For Daily/Weekly pages, show OCR summary dialog
+                        showOcrSummaryDialog(result.ocr_text, selectedPageType, null);
                     }
                 } else {
                     if (response.status === 401) {
@@ -1389,8 +1498,369 @@
             getDataBtn.disabled = false;
         });
 
-        // Global variable to store OCR data between modals
+        // Global variables to store OCR data between modals
         let currentOcrData = null;
+        let currentPageType = null;
+        let currentAgentResponse = null;
+
+        // OCR Summary Dialog Functions
+        function showOcrSummaryDialog(ocrData, pageType, agentResponse) {
+            currentOcrData = ocrData;
+            currentPageType = pageType;
+            currentAgentResponse = agentResponse;
+            
+            // Set dynamic title based on page type
+            const titleElement = document.getElementById('ocrSummaryTitle');
+            titleElement.textContent = `${pageType} Page Content Summary`;
+            
+            // Format the OCR data for display
+            let displayContent = '';
+            if (ocrData) {
+                try {
+                    const parsed = JSON.parse(ocrData);
+                    displayContent = formatOcrDataAsMarkdown(parsed, pageType);
+                } catch (e) {
+                    // If JSON parsing fails, treat as plain text OCR data
+                    displayContent = `<pre>${ocrData}</pre>`;
+                }
+            } else {
+                displayContent = `<pre>${agentResponse || 'No OCR data available'}</pre>`;
+            }
+            
+            // Use innerHTML instead of textContent to render HTML/markdown
+            document.getElementById('ocrSummaryContent').innerHTML = displayContent;
+            document.getElementById('ocrSummaryModal').style.display = 'flex';
+        }
+
+        // Format OCR data as user-friendly markdown based on page type
+        function formatOcrDataAsMarkdown(data, pageType) {
+            if (pageType === 'Daily') {
+                return formatDailyPageMarkdown(data);
+            } else if (pageType === 'Weekly') {
+                return formatWeeklyPageMarkdown(data);
+            } else if (pageType === 'Monthly') {
+                return formatMonthlyPageMarkdown(data);
+            } else {
+                return `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            }
+        }
+
+        // Helper function to format text with confidence checking
+        function formatWithConfidence(item, fieldName = 'task') {
+            if (typeof item === 'string') {
+                return item;
+            }
+            
+            const text = item[fieldName] || item.item || item.value || item;
+            const confidence = item.confidence;
+            
+            if (confidence && confidence < confidenceThreshold) {
+                return `<em>${text}</em>`;
+            }
+            return text;
+        }
+
+        // Format Daily page data
+        function formatDailyPageMarkdown(data) {
+            let html = '<div style="line-height: 1.6;">';
+            
+            // Header with date
+            if (data.date) {
+                const dateText = formatWithConfidence(data.date, 'value');
+                html += `<h2 style="color: #4f8cff; margin-bottom: 1.5rem;">📅 ${dateText}</h2>`;
+            }
+
+            // Left column sections
+            html += '<div style="margin-bottom: 2rem;">';
+            
+            // Priority tasks
+            if (data.prepare_priority && data.prepare_priority.length > 0) {
+                html += '<h3 style="color: #1db954; margin-bottom: 0.5rem;">📋 Priority Tasks</h3><ol style="margin-bottom: 1.5rem;">';
+                data.prepare_priority.forEach(task => {
+                    html += `<li>${formatWithConfidence(task)}</li>`;
+                });
+                html += '</ol>';
+            }
+
+            // To-Do items
+            if (data.to_do && data.to_do.length > 0) {
+                html += '<h3 style="color: #ff9800; margin-bottom: 0.5rem;">✓ To-Do Items</h3><ul style="margin-bottom: 1.5rem;">';
+                data.to_do.forEach(task => {
+                    html += `<li>${formatWithConfidence(task)}</li>`;
+                });
+                html += '</ul>';
+            }
+
+            // Gratitude
+            if (data.i_am_grateful_for && data.i_am_grateful_for.length > 0) {
+                html += '<h3 style="color: #9c27b0; margin-bottom: 0.5rem;">🙏 Grateful For</h3><ul style="margin-bottom: 1.5rem;">';
+                data.i_am_grateful_for.forEach(item => {
+                    html += `<li>${formatWithConfidence(item, 'item')}</li>`;
+                });
+                html += '</ul>';
+            }
+
+            // Looking forward to
+            if (data.i_am_looking_forward_to && data.i_am_looking_forward_to.length > 0) {
+                html += '<h3 style="color: #2196f3; margin-bottom: 0.5rem;">🎯 Looking Forward To</h3><ul style="margin-bottom: 1.5rem;">';
+                data.i_am_looking_forward_to.forEach(item => {
+                    html += `<li>${formatWithConfidence(item, 'item')}</li>`;
+                });
+                html += '</ul>';
+            }
+
+            html += '</div>';
+
+            // Right column sections
+            html += '<div style="border-top: 1px solid #444; padding-top: 1.5rem; margin-bottom: 2rem;">';
+
+            // Habit and Theme
+            if (data.habit || data.theme) {
+                html += '<div style="display: flex; gap: 2rem; margin-bottom: 1.5rem;">';
+                if (data.habit) {
+                    html += `<div><h4 style="color: #ff6b6b; margin-bottom: 0.25rem;">💪 Habit Focus</h4><p>${formatWithConfidence(data.habit, 'value')}</p></div>`;
+                }
+                if (data.theme) {
+                    html += `<div><h4 style="color: #4caf50; margin-bottom: 0.25rem;">🎨 Theme</h4><p>${formatWithConfidence(data.theme, 'value')}</p></div>`;
+                }
+                html += '</div>';
+            }
+
+            // Ways to give
+            if (data.ways_i_can_give && data.ways_i_can_give.length > 0) {
+                html += '<h3 style="color: #795548; margin-bottom: 0.5rem;">🤝 Ways I Can Give</h3><ul style="margin-bottom: 1.5rem;">';
+                data.ways_i_can_give.forEach(item => {
+                    html += `<li>${formatWithConfidence(item, 'item')}</li>`;
+                });
+                html += '</ul>';
+            }
+
+            // Reflection sections
+            if (data.reflect) {
+                html += `<h4 style="color: #607d8b; margin-bottom: 0.25rem;">💭 Reflect</h4><p style="margin-bottom: 1rem;">${formatWithConfidence(data.reflect, 'value')}</p>`;
+            }
+
+            if (data.i_was_at_my_best_when) {
+                html += `<h4 style="color: #8bc34a; margin-bottom: 0.25rem;">⭐ At My Best When</h4><p style="margin-bottom: 1rem;">${formatWithConfidence(data.i_was_at_my_best_when, 'value')}</p>`;
+            }
+
+            if (data.i_felt_unrest_when) {
+                html += `<h4 style="color: #ff5722; margin-bottom: 0.25rem;">😰 Felt Unrest When</h4><p style="margin-bottom: 1rem;">${formatWithConfidence(data.i_felt_unrest_when, 'value')}</p>`;
+            }
+
+            if (data.one_way_i_can_improve_tomorrow) {
+                html += `<h4 style="color: #3f51b5; margin-bottom: 0.25rem;">🚀 Tomorrow's Improvement</h4><p style="margin-bottom: 1rem;">${formatWithConfidence(data.one_way_i_can_improve_tomorrow, 'value')}</p>`;
+            }
+
+            html += '</div>';
+
+            // Daily schedule
+            if (data.daily && data.daily.length > 0) {
+                html += '<h3 style="color: #607d8b; margin-bottom: 0.5rem;">⏰ Daily Schedule</h3>';
+                html += '<div style="border-left: 3px solid #4f8cff; padding-left: 1rem; margin-bottom: 1rem;">';
+                data.daily.forEach(entry => {
+                    const hour = entry.hour;
+                    const timeStr = hour >= 12 ? `${hour === 12 ? 12 : hour - 12}:00 PM` : `${hour}:00 AM`;
+                    if (entry.activities && entry.activities.length > 0) {
+                        html += `<div style="margin-bottom: 0.5rem;"><strong>${timeStr}</strong>: `;
+                        const activities = entry.activities.map(activity => formatWithConfidence(activity, 'activity')).join(', ');
+                        html += activities + '</div>';
+                    }
+                });
+                html += '</div>';
+            }
+
+            html += '</div>';
+            return html;
+        }
+
+        // Format Weekly page data
+        function formatWeeklyPageMarkdown(data) {
+            let html = '<div style="line-height: 1.6;">';
+            html += '<h2 style="color: #4f8cff; margin-bottom: 1.5rem;">📊 Weekly Summary</h2>';
+
+            // Priority tasks
+            if (data.prepare_priority && data.prepare_priority.length > 0) {
+                html += '<h3 style="color: #1db954; margin-bottom: 0.5rem;">📋 Weekly Priorities</h3><ol style="margin-bottom: 1.5rem;">';
+                data.prepare_priority.forEach(task => {
+                    html += `<li>${formatWithConfidence(task)}</li>`;
+                });
+                html += '</ol>';
+            }
+
+            // Habit tracker
+            if (data.habit_tracker && data.habit_tracker.length > 0) {
+                html += '<h3 style="color: #ff9800; margin-bottom: 0.5rem;">📈 Habit Tracker</h3>';
+                html += '<div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; font-family: monospace;">';
+                const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+                data.habit_tracker.forEach((day, index) => {
+                    const dayLetter = days[index] || `D${index + 1}`;
+                    const marked = day.marked ? '✓' : '○';
+                    const color = day.marked ? '#4caf50' : '#666';
+                    html += `<div style="text-align: center; padding: 0.25rem;"><div style="font-weight: bold;">${dayLetter}</div><div style="color: ${color};">${marked}</div></div>`;
+                });
+                html += '</div>';
+            }
+
+            // Other weekly sections...
+            if (data.to_do && data.to_do.length > 0) {
+                html += '<h3 style="color: #ff9800; margin-bottom: 0.5rem;">✓ To-Do Items</h3><ul style="margin-bottom: 1.5rem;">';
+                data.to_do.forEach(task => {
+                    const completed = task.completed ? '✅' : '⬜';
+                    html += `<li>${completed} ${formatWithConfidence(task)}</li>`;
+                });
+                html += '</ul>';
+            }
+
+            html += '</div>';
+            return html;
+        }
+
+        // Format Monthly page data
+        function formatMonthlyPageMarkdown(data) {
+            let html = '<div style="line-height: 1.6;">';
+            
+            // Header with month/year
+            if (data.month) {
+                const monthText = data.month.month || 'Unknown Month';
+                const yearText = data.month.year || new Date().getFullYear();
+                html += `<h2 style="color: #4f8cff; margin-bottom: 1.5rem;">📅 ${monthText} ${yearText}</h2>`;
+            }
+
+            // Monthly check-in wellness ratings
+            if (data.monthly_check_in) {
+                html += '<h3 style="color: #9c27b0; margin-bottom: 0.5rem;">🌟 Monthly Check-In</h3>';
+                html += '<div style="margin-bottom: 1.5rem;">';
+                Object.entries(data.monthly_check_in).forEach(([category, rating]) => {
+                    if (rating) {
+                        const progress = '●'.repeat(rating) + '○'.repeat(10 - rating);
+                        html += `<div style="margin-bottom: 0.5rem;"><strong>${category}:</strong> <span style="font-family: monospace; color: #4caf50;">${progress}</span> (${rating}/10)</div>`;
+                    }
+                });
+                html += '</div>';
+            }
+
+            // Monthly priorities
+            if (data.prepare_priority && data.prepare_priority.length > 0) {
+                html += '<h3 style="color: #1db954; margin-bottom: 0.5rem;">🎯 Monthly Goals</h3><ol style="margin-bottom: 1.5rem;">';
+                data.prepare_priority.forEach(task => {
+                    html += `<li>${formatWithConfidence(task)}</li>`;
+                });
+                html += '</ol>';
+            }
+
+            html += '</div>';
+            return html;
+        }
+
+        function hideOcrSummaryDialog() {
+            document.getElementById('ocrSummaryModal').style.display = 'none';
+        }
+
+        // Todoist Confirmation Dialog Functions
+        function showTodoistConfirmDialog() {
+            if (currentPageType !== 'Daily' || !currentOcrData) {
+                // Skip Todoist for non-daily pages or if no data
+                completeAgentWorkflow();
+                return;
+            }
+            
+            try {
+                const ocrParsed = JSON.parse(currentOcrData);
+                
+                // Extract priority and todo tasks
+                const priorityTasks = ocrParsed.prepare_priority || [];
+                const todoTasks = ocrParsed.to_do || [];
+                
+                // Populate task preview
+                const priorityList = document.getElementById('priorityTasksList');
+                const todoList = document.getElementById('todoTasksList');
+                
+                priorityList.innerHTML = '';
+                todoList.innerHTML = '';
+                
+                priorityTasks.forEach(task => {
+                    const li = document.createElement('li');
+                    li.textContent = typeof task === 'string' ? task : task.task;
+                    priorityList.appendChild(li);
+                });
+                
+                todoTasks.forEach(task => {
+                    const li = document.createElement('li');
+                    li.textContent = typeof task === 'string' ? task : task.task;
+                    todoList.appendChild(li);
+                });
+                
+                // Show the dialog
+                document.getElementById('todoistConfirmModal').style.display = 'flex';
+                
+            } catch (e) {
+                console.error('Error parsing OCR data for Todoist preview:', e);
+                completeAgentWorkflow();
+            }
+        }
+
+        function hideTodoistConfirmDialog() {
+            document.getElementById('todoistConfirmModal').style.display = 'none';
+        }
+
+        function showTodoistSummaryDialog(result) {
+            const summaryDetails = document.getElementById('todoistSummaryDetails');
+            const newTasks = result.created_count || 0;
+            const duplicates = result.skipped_count || 0;
+            
+            summaryDetails.textContent = `${newTasks} new task${newTasks === 1 ? '' : 's'} created, ${duplicates} duplicate${duplicates === 1 ? '' : 's'} skipped`;
+            
+            document.getElementById('todoistSummaryModal').style.display = 'flex';
+        }
+
+        function completeAgentWorkflow() {
+            document.getElementById('detectionStatus').style.display = 'none';
+            message.textContent = 'Agent processing completed!';
+        }
+
+        function completeManualWorkflow() {
+            document.getElementById('detectionStatus').style.display = 'none';
+            message.textContent = 'Processing completed!';
+            submitBtn.disabled = false;
+        }
+
+        async function uploadToTodoistFromAgent() {
+            if (!currentOcrData) return;
+            
+            try {
+                const response = await fetch('/upload-to-todoist', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: currentOcrData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    hideTodoistConfirmDialog();
+                    showTodoistSummaryDialog(result);
+                } else {
+                    if (response.status === 401) {
+                        window.location.href = '/auth/google';
+                        return;
+                    }
+                    message.textContent = 'Error: ' + (result.detail || 'Failed to add to Todoist.');
+                    hideTodoistConfirmDialog();
+                    completeAgentWorkflow();
+                }
+            } catch (err) {
+                if (err.message && err.message.includes('401')) {
+                    window.location.href = '/auth/google';
+                    return;
+                }
+                message.textContent = 'Error: Failed to add to Todoist.';
+                hideTodoistConfirmDialog();
+                completeAgentWorkflow();
+            }
+        }
 
         // Month Verification Modal Functions
         function showMonthVerificationModal(ocrData) {
@@ -1564,7 +2034,8 @@
 
         // Page Type Confirmation Modal event listeners
         document.getElementById('confirmPageType').addEventListener('click', () => {
-            const selectedPageType = document.getElementById('pageTypeSelect').value;
+            // Use the detected page type directly from the current detection result
+            const selectedPageType = currentDetectionResult.page_type;
             proceedWithOcrProcessing(selectedPageType);
         });
 
@@ -1582,6 +2053,71 @@
                 document.getElementById('detectionStatus').style.display = 'none';
                 submitBtn.disabled = false;
                 message.textContent = 'Processing cancelled.';
+            }
+        });
+
+        // OCR Summary Modal event listeners
+        document.getElementById('confirmOcrSummary').addEventListener('click', () => {
+            hideOcrSummaryDialog();
+            
+            // In agent workflow, show Todoist dialog for Daily pages
+            if (isAgentWorkflow && currentPageType === 'Daily') {
+                showTodoistConfirmDialog();
+            } else {
+                // In manual workflow, just complete
+                completeManualWorkflow();
+            }
+        });
+
+        document.getElementById('closeOcrSummary').addEventListener('click', () => {
+            hideOcrSummaryDialog();
+            
+            // Set lastOcrData so the Todoist button can access it
+            lastOcrData = currentOcrData;
+            
+            // Enable the Todoist button for manual upload
+            todoistBtn.disabled = false;
+            
+            // Exit workflow for both agent and manual workflows
+            if (isAgentWorkflow) {
+                completeAgentWorkflow();
+            } else {
+                completeManualWorkflow();
+            }
+        });
+
+        // Close OCR summary modal when clicking outside
+        document.getElementById('ocrSummaryModal').addEventListener('click', (e) => {
+            if (e.target.id === 'ocrSummaryModal') {
+                hideOcrSummaryDialog();
+                if (isAgentWorkflow) {
+                    completeAgentWorkflow();
+                } else {
+                    completeManualWorkflow();
+                }
+            }
+        });
+
+        // Todoist Confirmation Modal event listeners
+        document.getElementById('confirmTodoistUpload').addEventListener('click', () => {
+            uploadToTodoistFromAgent();
+        });
+
+        document.getElementById('cancelTodoistUpload').addEventListener('click', () => {
+            hideTodoistConfirmDialog();
+            completeAgentWorkflow();
+        });
+
+        document.getElementById('closeTodoistSummary').addEventListener('click', () => {
+            document.getElementById('todoistSummaryModal').style.display = 'none';
+            completeAgentWorkflow();
+        });
+
+        // Close Todoist modal when clicking outside
+        document.getElementById('todoistConfirmModal').addEventListener('click', (e) => {
+            if (e.target.id === 'todoistConfirmModal') {
+                hideTodoistConfirmDialog();
+                completeAgentWorkflow();
             }
         });
         
