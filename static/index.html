@@ -407,7 +407,68 @@
         
         .get-data-btn:disabled {
             background: #444;
-            cursor: not-allowed;
+        }
+
+        .monthly-checkin-form {
+            display: grid;
+            gap: 0.8rem;
+            margin: 1rem 0;
+        }
+
+        .monthly-checkin-form .form-group {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .monthly-checkin-form .form-group label {
+            min-width: 120px;
+            text-align: right;
+            color: #f3f3f3;
+            font-size: 0.9rem;
+        }
+
+        .monthly-checkin-form .form-group input {
+            flex: 1;
+            max-width: 80px;
+        }
+
+        .month-verification-form {
+            display: grid;
+            gap: 0.8rem;
+            margin: 1rem 0;
+        }
+
+        .month-verification-form .form-group {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .month-verification-form .form-group label {
+            min-width: 80px;
+            text-align: right;
+            color: #f3f3f3;
+            font-size: 0.9rem;
+        }
+
+        .month-verification-form select,
+        .month-verification-form input {
+            flex: 1;
+            padding: 0.4rem;
+            border: 1px solid #444;
+            border-radius: 4px;
+            background: #181a1b;
+            color: #f3f3f3;
+            font-size: 0.8rem;
+        }
+
+        .month-verification-form select:focus,
+        .month-verification-form input:focus {
+            outline: none;
+            border-color: #4f8cff;
         }
         
         .gmail-message {
@@ -428,10 +489,8 @@
         <button class="browse-btn" id="browseBtn">Browse Computer</button>
         <input type="file" id="fileInput" class="file-input" accept=".jpeg,.jpg,.png" />
         <div class="preview" id="preview"></div>
-        <div class="category-group" style="margin-bottom: 1rem; width: 100%; display: flex; justify-content: space-around;">
-            <label><input type="radio" name="category" value="Day" checked> Day</label>
-            <label><input type="radio" name="category" value="Week"> Week</label>
-            <label><input type="radio" name="category" value="Month"> Month</label>
+        <div id="detectionStatus" style="margin-bottom: 1rem; text-align: center; color: #888; font-size: 0.9rem; display: none;">
+            <span id="detectionText">Detecting page type...</span>
         </div>
         <button class="submit-btn" id="submitBtn" disabled>Submit</button>
         <button class="todoist-btn" id="todoistBtn" disabled>Add to Todoist</button>
@@ -485,6 +544,111 @@
             </div>
         </div>
     </div>
+
+    <!-- Month Verification Modal -->
+    <div id="monthVerificationModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>Verify Month & Year</h3>
+            <p>Please verify or correct the month and year for this journal page:</p>
+            <div class="month-verification-form">
+                <div class="form-group">
+                    <label for="monthSelect">Month:</label>
+                    <select id="monthSelect">
+                        <option value="January">January</option>
+                        <option value="February">February</option>
+                        <option value="March">March</option>
+                        <option value="April">April</option>
+                        <option value="May">May</option>
+                        <option value="June">June</option>
+                        <option value="July">July</option>
+                        <option value="August">August</option>
+                        <option value="September">September</option>
+                        <option value="October">October</option>
+                        <option value="November">November</option>
+                        <option value="December">December</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="yearInput">Year:</label>
+                    <input type="number" id="yearInput" min="2020" max="2030" />
+                </div>
+            </div>
+            <div class="modal-buttons">
+                <button id="cancelMonthVerification" class="cancel-btn">Cancel</button>
+                <button id="submitMonthVerification" class="confirm-btn">Continue</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Monthly Check-In Values Modal -->
+    <div id="monthlyCheckInModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>Verify/Edit Monthly Check-In Values</h3>
+            <p>Please enter your wellness ratings (1-10) for each category:</p>
+            <div class="monthly-checkin-form">
+                <div class="form-group">
+                    <label for="relationships">Relationships:</label>
+                    <input type="number" id="relationships" min="1" max="10" />
+                </div>
+                <div class="form-group">
+                    <label for="physical">Physical:</label>
+                    <input type="number" id="physical" min="1" max="10" />
+                </div>
+                <div class="form-group">
+                    <label for="spiritual">Spiritual:</label>
+                    <input type="number" id="spiritual" min="1" max="10" />
+                </div>
+                <div class="form-group">
+                    <label for="workVocation">Work/Vocation:</label>
+                    <input type="number" id="workVocation" min="1" max="10" />
+                </div>
+                <div class="form-group">
+                    <label for="personalGrowth">Personal Growth:</label>
+                    <input type="number" id="personalGrowth" min="1" max="10" />
+                </div>
+                <div class="form-group">
+                    <label for="play">Play:</label>
+                    <input type="number" id="play" min="1" max="10" />
+                </div>
+                <div class="form-group">
+                    <label for="peace">Peace:</label>
+                    <input type="number" id="peace" min="1" max="10" />
+                </div>
+            </div>
+            <div class="modal-buttons">
+                <button id="cancelMonthlyCheckIn" class="cancel-btn">Cancel</button>
+                <button id="submitMonthlyCheckIn" class="confirm-btn">Submit</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Page Type Confirmation Modal -->
+    <div id="pageTypeConfirmModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>Confirm Page Type</h3>
+            <p>We detected this page as:</p>
+            <div style="text-align: center; margin: 1.5rem 0;">
+                <div style="font-size: 1.5rem; color: #4f8cff; font-weight: bold;" id="detectedPageType">Daily</div>
+                <div style="font-size: 0.8rem; color: #aaa; margin-top: 0.5rem; display: none;" id="detectedReasoning">
+                    Analysis in progress...
+                </div>
+            </div>
+            <div class="form-group" style="margin: 1.5rem 0;">
+                <label for="pageTypeSelect" style="display: block; margin-bottom: 0.5rem; color: #b0b0b0;">
+                    Or select a different page type:
+                </label>
+                <select id="pageTypeSelect" style="width: 100%; padding: 0.5rem; background: #181a1b; color: #f3f3f3; border: 1px solid #444; border-radius: 4px;">
+                    <option value="Daily">Daily</option>
+                    <option value="Weekly">Weekly</option>
+                    <option value="Monthly">Monthly</option>
+                </select>
+            </div>
+            <div class="modal-buttons">
+                <button id="cancelPageType" class="cancel-btn">Cancel</button>
+                <button id="confirmPageType" class="confirm-btn">Proceed</button>
+            </div>
+        </div>
+    </div>
     <script>
         const dropArea = document.getElementById('drop-area');
         const fileInput = document.getElementById('fileInput');
@@ -500,6 +664,7 @@
         let currentTaskIndex = 0;
         let reviewedTaskData = null;
         let confidenceThreshold = 0.8; // Default value
+        let isDebugMode = false; // Track if logging is set to DEBUG
 
         // Modal elements
         const confidenceModal = document.getElementById('confidenceModal');
@@ -536,6 +701,8 @@
                 }
                 const config = await response.json();
                 confidenceThreshold = config.task_confidence_threshold;
+                isDebugMode = config.log_level === 'DEBUG';
+                console.log('Debug mode:', isDebugMode);
             } catch (err) {
                 if (err.message && err.message.includes('401')) {
                     // Redirect to authentication if unauthorized
@@ -876,18 +1043,83 @@
             }
         });
 
+        // Global variable to store detection result
+        let currentDetectionResult = null;
+
         submitBtn.addEventListener('click', async () => {
             if (!selectedFile) return;
             submitBtn.disabled = true;
             todoistBtn.disabled = true;
-            message.textContent = 'Processing Image File...';
+            message.textContent = 'Detecting page type...';
             ocrResult.textContent = '';
+            document.getElementById('detectionStatus').style.display = 'block';
+            document.getElementById('detectionText').textContent = 'Analyzing page layout...';
             
+            // Step 1: Detect page type
+            const detectionFormData = new FormData();
+            detectionFormData.append('file', selectedFile);
+            
+            try {
+                const detectionResponse = await fetch('/detect-page-type', {
+                    method: 'POST',
+                    body: detectionFormData
+                });
+                const detectionResult = await detectionResponse.json();
+                
+                if (!detectionResponse.ok) {
+                    if (detectionResponse.status === 401) {
+                        window.location.href = '/auth/google';
+                        return;
+                    }
+                    throw new Error(detectionResult.error || 'Page type detection failed');
+                }
+                
+                // Store detection result and show confirmation modal
+                currentDetectionResult = detectionResult;
+                showPageTypeConfirmationModal(detectionResult);
+                
+            } catch (detectionError) {
+                console.error('Page type detection failed:', detectionError);
+                document.getElementById('detectionText').textContent = 'Detection failed, using Daily as default';
+                
+                // Create fallback detection result
+                currentDetectionResult = {
+                    page_type: 'Daily',
+                    reasoning: 'Detection failed, using Daily as fallback'
+                };
+                showPageTypeConfirmationModal(currentDetectionResult);
+            }
+        });
+
+        // Function to show page type confirmation modal
+        function showPageTypeConfirmationModal(detectionResult) {
+            document.getElementById('detectedPageType').textContent = detectionResult.page_type;
+            
+            // Only show reasoning in DEBUG mode
+            const reasoningElement = document.getElementById('detectedReasoning');
+            if (isDebugMode) {
+                reasoningElement.textContent = detectionResult.reasoning || 'No reasoning provided';
+                reasoningElement.style.display = 'block';
+            } else {
+                reasoningElement.style.display = 'none';
+            }
+            
+            document.getElementById('pageTypeSelect').value = detectionResult.page_type;
+            document.getElementById('pageTypeConfirmModal').style.display = 'flex';
+        }
+
+        // Function to proceed with OCR processing
+        async function proceedWithOcrProcessing(selectedPageType) {
+            document.getElementById('pageTypeConfirmModal').style.display = 'none';
+            
+            document.getElementById('detectionText').textContent = 
+                `Using: ${selectedPageType} page`;
+            message.textContent = 'Processing with selected page type...';
+            
+            // Step 2: Process with selected page type
             const formData = new FormData();
             formData.append('file', selectedFile);
-            // Get selected category
-            const category = document.querySelector('input[name="category"]:checked').value;
-            formData.append('category', category);
+            formData.append('category', selectedPageType);
             
             try {
                 const response = await fetch('/upload-image', {
@@ -900,7 +1132,7 @@
                     // Process OCR results
                     lastOcrData = result.ocr_text;
                     todoistBtn.disabled = false; // Re-enable Todoist button after successful upload
-                    message.textContent = 'Processing complete!';
+                    message.textContent = `Processing complete! (Used: ${selectedPageType})`;
                     
                     if (result.ocr_text) {
                         ocrResult.textContent = result.ocr_text;
@@ -908,6 +1140,11 @@
                     } else {
                         ocrResult.textContent = 'No text detected.';
                         ocrResult.style.display = 'block';
+                    }
+
+                    // Show Month Verification modal for monthly uploads
+                    if (selectedPageType === 'Monthly') {
+                        showMonthVerificationModal(result.ocr_text);
                     }
                 } else {
                     if (response.status === 401) {
@@ -919,6 +1156,7 @@
                     ocrResult.textContent = '';
                     ocrResult.style.display = 'none';
                     todoistBtn.disabled = true;
+                    document.getElementById('detectionStatus').style.display = 'none';
                 }
             } catch (err) {
                 if (err.message && err.message.includes('401')) {
@@ -930,9 +1168,10 @@
                 ocrResult.textContent = '';
                 ocrResult.style.display = 'none';
                 todoistBtn.disabled = true;
+                document.getElementById('detectionStatus').style.display = 'none';
             }
             submitBtn.disabled = false;
-        });
+        }
 
         todoistBtn.addEventListener('click', async () => {
             if (!lastOcrData) return;
@@ -1148,6 +1387,202 @@
             }
             
             getDataBtn.disabled = false;
+        });
+
+        // Global variable to store OCR data between modals
+        let currentOcrData = null;
+
+        // Month Verification Modal Functions
+        function showMonthVerificationModal(ocrData) {
+            currentOcrData = ocrData;
+            const modal = document.getElementById('monthVerificationModal');
+            
+            // Pre-fill month and year from OCR if available
+            try {
+                const parsedData = JSON.parse(ocrData);
+                if (parsedData.month && parsedData.month.month && parsedData.month.year) {
+                    // Backend has already parsed and normalized the month/year format
+                    document.getElementById('monthSelect').value = parsedData.month.month;
+                    document.getElementById('yearInput').value = parsedData.month.year;
+                } else {
+                    // Set to current month/year as fallback
+                    const now = new Date();
+                    const currentMonth = now.toLocaleString('default', { month: 'long' });
+                    document.getElementById('monthSelect').value = currentMonth;
+                    document.getElementById('yearInput').value = now.getFullYear();
+                }
+            } catch (e) {
+                console.log('Could not pre-fill month/year from OCR data');
+                // Set to current month/year as fallback
+                const now = new Date();
+                const currentMonth = now.toLocaleString('default', { month: 'long' });
+                document.getElementById('monthSelect').value = currentMonth;
+                document.getElementById('yearInput').value = now.getFullYear();
+            }
+            
+            modal.style.display = 'block';
+        }
+
+        function hideMonthVerificationModal() {
+            const modal = document.getElementById('monthVerificationModal');
+            modal.style.display = 'none';
+        }
+
+        function updateOcrDataWithMonth() {
+            const selectedMonth = document.getElementById('monthSelect').value;
+            const selectedYear = parseInt(document.getElementById('yearInput').value);
+
+            // Update the currentOcrData with corrected month in new format
+            try {
+                const parsedData = JSON.parse(currentOcrData);
+                if (!parsedData.month) {
+                    parsedData.month = {};
+                }
+                parsedData.month.month = selectedMonth;
+                parsedData.month.year = selectedYear;
+                parsedData.month.confidence = 1.0; // High confidence for manually verified value
+                
+                currentOcrData = JSON.stringify(parsedData, null, 2);
+                
+                // Update lastOcrData as well
+                lastOcrData = currentOcrData;
+                
+                // Update the displayed OCR result
+                ocrResult.textContent = lastOcrData;
+                
+            } catch (e) {
+                console.error('Error updating OCR data with month:', e);
+            }
+        }
+
+        // Monthly Check-In Modal Functions
+        function showMonthlyCheckInModal() {
+            const modal = document.getElementById('monthlyCheckInModal');
+            
+            // Pre-fill values from OCR if available
+            try {
+                const parsedData = JSON.parse(currentOcrData);
+                if (parsedData.monthly_check_in) {
+                    const monthlyData = parsedData.monthly_check_in;
+                    
+                    if (monthlyData.relationships) document.getElementById('relationships').value = monthlyData.relationships;
+                    if (monthlyData.physical) document.getElementById('physical').value = monthlyData.physical;
+                    if (monthlyData.spiritual) document.getElementById('spiritual').value = monthlyData.spiritual;
+                    if (monthlyData['work/vocation']) document.getElementById('workVocation').value = monthlyData['work/vocation'];
+                    if (monthlyData['personal growth']) document.getElementById('personalGrowth').value = monthlyData['personal growth'];
+                    if (monthlyData.play) document.getElementById('play').value = monthlyData.play;
+                    if (monthlyData.peace) document.getElementById('peace').value = monthlyData.peace;
+                }
+            } catch (e) {
+                console.log('Could not pre-fill values from OCR data');
+            }
+            
+            modal.style.display = 'block';
+        }
+
+        function hideMonthlyCheckInModal() {
+            const modal = document.getElementById('monthlyCheckInModal');
+            modal.style.display = 'none';
+            
+            // Clear form values
+            document.getElementById('relationships').value = '';
+            document.getElementById('physical').value = '';
+            document.getElementById('spiritual').value = '';
+            document.getElementById('workVocation').value = '';
+            document.getElementById('personalGrowth').value = '';
+            document.getElementById('play').value = '';
+            document.getElementById('peace').value = '';
+        }
+
+        function updateOcrDataWithMonthlyCheckIn() {
+            // Get values from form
+            const monthlyCheckInValues = {
+                relationships: parseInt(document.getElementById('relationships').value) || null,
+                physical: parseInt(document.getElementById('physical').value) || null,
+                spiritual: parseInt(document.getElementById('spiritual').value) || null,
+                'work/vocation': parseInt(document.getElementById('workVocation').value) || null,
+                'personal growth': parseInt(document.getElementById('personalGrowth').value) || null,
+                play: parseInt(document.getElementById('play').value) || null,
+                peace: parseInt(document.getElementById('peace').value) || null
+            };
+
+            // Remove null values
+            Object.keys(monthlyCheckInValues).forEach(key => {
+                if (monthlyCheckInValues[key] === null) {
+                    delete monthlyCheckInValues[key];
+                }
+            });
+
+            // Update the currentOcrData with manual values
+            try {
+                const parsedData = JSON.parse(currentOcrData);
+                parsedData.monthly_check_in = monthlyCheckInValues;
+                currentOcrData = JSON.stringify(parsedData, null, 2);
+                lastOcrData = currentOcrData; // Update lastOcrData as well
+                
+                // Update the displayed OCR result
+                ocrResult.textContent = lastOcrData;
+                
+                message.textContent = 'Monthly Check-In values updated!';
+                setTimeout(() => {
+                    message.textContent = '';
+                }, 2000);
+            } catch (e) {
+                console.error('Error updating OCR data with monthly check-in values:', e);
+                message.textContent = 'Error updating values';
+            }
+        }
+
+        // Month Verification Modal event listeners
+        document.getElementById('cancelMonthVerification').addEventListener('click', hideMonthVerificationModal);
+        document.getElementById('submitMonthVerification').addEventListener('click', () => {
+            updateOcrDataWithMonth();
+            hideMonthVerificationModal();
+            showMonthlyCheckInModal(); // Continue to Monthly Check-In modal
+        });
+
+        // Close month verification modal when clicking outside
+        document.getElementById('monthVerificationModal').addEventListener('click', (e) => {
+            if (e.target.id === 'monthVerificationModal') {
+                hideMonthVerificationModal();
+            }
+        });
+
+        // Monthly Check-In Modal event listeners
+        document.getElementById('cancelMonthlyCheckIn').addEventListener('click', hideMonthlyCheckInModal);
+        document.getElementById('submitMonthlyCheckIn').addEventListener('click', () => {
+            updateOcrDataWithMonthlyCheckIn();
+            hideMonthlyCheckInModal();
+        });
+
+        // Close modal when clicking outside
+        document.getElementById('monthlyCheckInModal').addEventListener('click', (e) => {
+            if (e.target.id === 'monthlyCheckInModal') {
+                hideMonthlyCheckInModal();
+            }
+        });
+
+        // Page Type Confirmation Modal event listeners
+        document.getElementById('confirmPageType').addEventListener('click', () => {
+            const selectedPageType = document.getElementById('pageTypeSelect').value;
+            proceedWithOcrProcessing(selectedPageType);
+        });
+
+        document.getElementById('cancelPageType').addEventListener('click', () => {
+            document.getElementById('pageTypeConfirmModal').style.display = 'none';
+            document.getElementById('detectionStatus').style.display = 'none';
+            submitBtn.disabled = false;
+            message.textContent = 'Processing cancelled.';
+        });
+
+        // Close page type modal when clicking outside
+        document.getElementById('pageTypeConfirmModal').addEventListener('click', (e) => {
+            if (e.target.id === 'pageTypeConfirmModal') {
+                document.getElementById('pageTypeConfirmModal').style.display = 'none';
+                document.getElementById('detectionStatus').style.display = 'none';
+                submitBtn.disabled = false;
+                message.textContent = 'Processing cancelled.';
+            }
         });
         
         // Check authentication status on page load

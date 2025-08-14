@@ -25,9 +25,28 @@ class OCRFactory:
         except ImportError:
             pass  # Engine not available
         
+        # Register page-specific OCR adapters
+        try:
+            from .daily_ocr import DailyOCRAdapter
+            self._engines["DailyOCRAdapter"] = DailyOCRAdapter
+        except ImportError:
+            pass  # Engine not available
+            
+        try:
+            from .weekly_ocr import WeeklyOCRAdapter
+            self._engines["WeeklyOCRAdapter"] = WeeklyOCRAdapter
+        except ImportError:
+            pass  # Engine not available
+            
+        try:
+            from .monthly_ocr import MonthlyOCRAdapter
+            self._engines["MonthlyOCRAdapter"] = MonthlyOCRAdapter
+        except ImportError:
+            pass  # Engine not available
+        
         # Add more engines here as they become available
         # try:
-        #     from .ocr.tesseract_ocr import TesseractOCRAdapter
+        #     from .tesseract_ocr import TesseractOCRAdapter
         #     self._engines["TesseractOCRAdapter"] = TesseractOCRAdapter
         # except ImportError:
         #     pass
