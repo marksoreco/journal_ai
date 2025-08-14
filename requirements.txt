@@ -7,6 +7,9 @@ todoist-api-python
 sentence-transformers
 dateparser
 Pillow
+langchain
+langchain-openai
+langchain-community
 
 # Google API
 google-api-python-client
