@@ -6,6 +6,7 @@ python-dotenv
 todoist-api-python
 sentence-transformers
 dateparser
+Pillow
 
 # Google API
 google-api-python-client

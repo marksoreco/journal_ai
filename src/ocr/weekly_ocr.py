@@ -17,7 +17,7 @@ class WeeklyOCRAdapter(BaseOCR):
             raise ValueError("OPENAI_API_KEY environment variable is required")
         self.client = OpenAI(api_key=api_key)
 
-    def extract_text(self, image_path: str, category: str = "Week") -> str:
+    def extract_text(self, image_path: str, category: str = "Weekly") -> str:
         logger.info(f"Starting weekly page OCR extraction for image: {image_path}")
         
         # Read and encode the image
@@ -31,18 +31,28 @@ class WeeklyOCRAdapter(BaseOCR):
 These pages come from the Monk Manual weekly pages, which contain specific sections. Each page may include handwritten or printed text under the following headings:
 
 For weekly pages:
-- "WEEK OF": The date range of the week.
-- "WEEKLY PRIORITIES": The top priorities for the week.
-- "WEEKLY GOALS": Goals to accomplish during the week.
-- "HABITS TO FOCUS ON": Habits to work on this week.
-- "WEEKLY REFLECTION": Reflection on the previous week.
-- "DAILY BREAKDOWN": Day-by-day tasks and priorities.
+- "WEEK": The date range of the week (e.g., "7/29 - 8/3").
+- "PREPARE - PRIORITY": Numbered priorities (1, 2, 3) for the week.
+- "TO-DO": Checklist items for weekly tasks. Each item may have an 'X', checkmark (✓), or similar completion mark at the beginning of the line before the text to indicate completion.
+- "PERSONAL GROWTH": Text about personal development goals.
+- "RELATIONSHIP(S) GROWTH": Text about relationship improvement goals.
+- "I'M LOOKING FORWARD TO": Numbered list (1, 2, 3) of anticipated events or activities.
+- "HABIT TRACKER": Grid showing days of the week (M T W T F S S) for tracking habits. Look for deliberate 'X' marks, checkmarks (✓), or dots that appear immediately BEFORE each day letter. These marks indicate habit completion for that day. Distinguish between intentional completion marks and accidental marks/smudges.
+- "REFLECT" section containing:
+  - "BIGGEST ACCOMPLISHMENTS": Numbered achievements from the week.
+  - "HABITS INSIGHTS": Reflections on habit formation and progress.
+  - "MEANINGFUL MOMENTS": Special moments or experiences from the week.
+- "GOD IS TEACHING ME": Spiritual reflections or lessons learned.
+- "ONE CHANGE I CAN MAKE NEXT WEEK": Single improvement focus for the upcoming week.
 
 Your job is to:
-- Identify each section based on layout or header.
+- Identify each section based on layout or header text.
 - Extract the text content written under each section.
+- For TO-DO items, examine each line carefully. Look for 'X' marks, checkmarks (✓), or similar completion symbols at the very beginning of each line, immediately before the text. If there's a completion mark before the text, set "completed": true. If there's no mark or just a blank checkbox, set "completed": false.
+- For HABIT TRACKER, examine the habit tracker grid which shows days (M T W T F S S). Look for deliberate marks like 'X', checkmarks (✓), or dots that appear immediately BEFORE each day letter. The user writes completion marks before the day letter. Look carefully at the spacing and positioning - if there's an 'X' or similar mark positioned before a day letter (not just random marks), that indicates completion. Be reasonably confident in identifying intentional marks while avoiding obvious smudges or artifacts.
 - Return a JSON object with a key for each section and its content.
-- If a section is not present or has no content, leave it blank or null.
+- If a section is not present or has no content, include it with empty content.
+- If no text content is present for a line under a section, do not include that line in the json output.
 
 IMPORTANT: For each extracted item, provide a realistic confidence score (0.0 to 1.0) based on:
 - Text clarity and readability (clear text = higher confidence)
@@ -50,6 +60,14 @@ IMPORTANT: For each extracted item, provide a realistic confidence score (0.0 to
 - Completeness of text (complete words = higher confidence)
 - Certainty of interpretation (unambiguous = higher confidence)
 - Image quality (sharp, well-lit = higher confidence)
+
+For HABIT TRACKER marks specifically:
+- Use high confidence (0.85+) for clear, deliberate marks (X, ✓, etc.) that are clearly positioned before day letters
+- Use medium confidence (0.70-0.84) for marks that are likely intentional but positioning is less clear
+- Use low confidence (0.50-0.69) for questionable marks or poor image quality
+- When marking false (no mark detected), use high confidence if you're certain there's no mark
+
+For HABIT TRACKER, after initial processing double-check and triple-check that any items with "completed" set to false do not have an 'X' or checkmark (✓) or any other mark before the item text.  If they do, then set "completed" to true.
 
 Confidence guidelines:
 - 0.90-1.0: Perfect clarity, printed text, or very neat handwriting
@@ -62,59 +80,75 @@ Confidence guidelines:
 Here is an example of the expected output format for a Monk Manual weekly page:
 
 {
-  "week_of": {
-    "value": "March 15-21, 2024",
+  "week": {
+    "value": "7/29 - 8/3",
     "confidence": 0.98
   },
-  "weekly_priorities": [
+  "prepare_priority": {
+    "1": {"value": "Business Sale progress", "confidence": 0.94},
+    "2": {"value": "Exercise/Sleep", "confidence": 0.87},
+    "3": {"value": "Art Cog bootcamp", "confidence": 0.91}
+  },
+  "to_do": [
     {
-      "priority": "Complete project proposal",
-      "confidence": 0.94
-    },
-    {
-      "priority": "Plan team workshop",
-      "confidence": 0.87
-    },
-    {
-      "priority": "Review quarterly goals",
-      "confidence": 0.91
-    }
-  ],
-  "weekly_goals": [
-    {
-      "goal": "Launch marketing campaign",
+      "item": "Oil and drain",
+      "completed": true,
       "confidence": 0.89
     },
     {
-      "goal": "Improve team communication",
-      "confidence": 0.83
-    }
-  ],
-  "habits_to_focus_on": [
-    {
-      "habit": "Morning exercise routine",
-      "confidence": 0.92
+      "item": "RV DMV registration", 
+      "completed": false,
+      "confidence": 0.85
     },
     {
-      "habit": "Daily reading",
-      "confidence": 0.95
+      "item": "Take Billie out",
+      "completed": true,
+      "confidence": 0.90
     }
   ],
-  "weekly_reflection": {
-    "value": "Last week was productive but lacked focus on personal development",
+  "personal_growth": {
+    "value": "Learning and wellness",
+    "confidence": 0.85
+  },
+  "relationships_growth": {
+    "value": "Quality time with Teresa, reconnect with Frank, Daniel",
     "confidence": 0.78
   },
-  "daily_breakdown": [
-    {
-      "day": "Monday",
-      "tasks": [
-        {
-          "task": "Team standup meeting",
-          "confidence": 0.93
-        }
-      ]
+  "looking_forward_to": {
+    "1": {"value": "Creating sustainable solid", "confidence": 0.82},
+    "2": {"value": "Learning more about AI", "confidence": 0.88},
+    "3": {"value": "Being active", "confidence": 0.90}
+  },
+  "habit_tracker": {
+    "monday": {"marked": true, "confidence": 0.88},
+    "tuesday": {"marked": false, "confidence": 0.92},
+    "wednesday": {"marked": false, "confidence": 0.90},
+    "thursday": {"marked": false, "confidence": 0.91},
+    "friday": {"marked": false, "confidence": 0.89},
+    "saturday": {"marked": false, "confidence": 0.93},
+    "sunday": {"marked": false, "confidence": 0.90}
+  },
+  "reflect": {
+    "biggest_accomplishments": [
+      {"value": "Completed project milestone", "confidence": 0.89}
+    ],
+    "habits_insights": {
+      "value": "Need to be more consistent with morning routine",
+      "confidence": 0.75
+    },
+    "meaningful_moments": {
+      "value": "This is the Endless Elimination of Hurt - Enneagram 9/01",
+      "confidence": 0.73
     }
-  ]
+  },
+  "god_is_teaching_me": {
+    "value": "Patience and trust in His timing",
+    "confidence": 0.80
+  },
+  "one_change_next_week": {
+    "value": "Focus more on daily planning",
+    "confidence": 0.85
+  }
 }
 """
 
@@ -126,88 +160,226 @@ Here is an example of the expected output format for a Monk Manual weekly page:
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "week_of": {
+                        "week": {
                             "type": "object",
                             "properties": {
                                 "value": { "type": "string" },
                                 "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
                             },
                             "required": ["value", "confidence"],
-                            "description": "The date range of the week"
+                            "description": "The date range of the week (e.g., '7/29 - 8/3')"
                         },
-                        "weekly_priorities": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "priority": { "type": "string" },
-                                    "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
-                                },
-                                "required": ["priority", "confidence"]
-                            },
-                            "description": "Main priorities for the week"
-                        },
-                        "weekly_goals": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "goal": { "type": "string" },
-                                    "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
-                                },
-                                "required": ["goal", "confidence"]
-                            },
-                            "description": "Goals to accomplish during the week"
-                        },
-                        "habits_to_focus_on": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "habit": { "type": "string" },
-                                    "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
-                                },
-                                "required": ["habit", "confidence"]
-                            },
-                            "description": "Habits to work on this week"
-                        },
-                        "weekly_reflection": {
+                        "prepare_priority": {
                             "type": "object",
                             "properties": {
-                                "value": { "type": "string" },
-                                "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
-                            },
-                            "required": ["value", "confidence"],
-                            "description": "Reflection on the previous week"
-                        },
-                        "daily_breakdown": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "day": {
-                                        "type": "string",
-                                        "description": "Day of the week (Monday, Tuesday, etc.)"
+                                "1": {
+                                    "type": "object",
+                                    "properties": {
+                                        "value": { "type": "string" },
+                                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
                                     },
-                                    "tasks": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "properties": {
-                                                "task": { "type": "string" },
-                                                "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
-                                            },
-                                            "required": ["task", "confidence"]
-                                        },
-                                        "description": "Tasks for this day"
-                                    }
+                                    "required": ["value", "confidence"]
                                 },
-                                "required": ["day", "tasks"]
+                                "2": {
+                                    "type": "object",
+                                    "properties": {
+                                        "value": { "type": "string" },
+                                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                                    },
+                                    "required": ["value", "confidence"]
+                                },
+                                "3": {
+                                    "type": "object",
+                                    "properties": {
+                                        "value": { "type": "string" },
+                                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                                    },
+                                    "required": ["value", "confidence"]
+                                }
                             },
-                            "description": "Day-by-day breakdown of tasks and priorities"
+                            "description": "Top 3 priorities for the week"
+                        },
+                        "to_do": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "item": { "type": "string" },
+                                    "completed": { "type": "boolean" },
+                                    "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                                },
+                                "required": ["item", "completed", "confidence"]
+                            },
+                            "description": "Weekly to-do checklist items"
+                        },
+                        "personal_growth": {
+                            "type": "object",
+                            "properties": {
+                                "value": { "type": "string" },
+                                "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                            },
+                            "required": ["value", "confidence"],
+                            "description": "Personal development focus for the week"
+                        },
+                        "relationships_growth": {
+                            "type": "object",
+                            "properties": {
+                                "value": { "type": "string" },
+                                "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                            },
+                            "required": ["value", "confidence"],
+                            "description": "Relationship improvement goals for the week"
+                        },
+                        "looking_forward_to": {
+                            "type": "object",
+                            "properties": {
+                                "1": {
+                                    "type": "object",
+                                    "properties": {
+                                        "value": { "type": "string" },
+                                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                                    },
+                                    "required": ["value", "confidence"]
+                                },
+                                "2": {
+                                    "type": "object",
+                                    "properties": {
+                                        "value": { "type": "string" },
+                                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                                    },
+                                    "required": ["value", "confidence"]
+                                },
+                                "3": {
+                                    "type": "object",
+                                    "properties": {
+                                        "value": { "type": "string" },
+                                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                                    },
+                                    "required": ["value", "confidence"]
+                                }
+                            },
+                            "description": "Top 3 things looking forward to this week"
+                        },
+                        "habit_tracker": {
+                            "type": "object",
+                            "properties": {
+                                "monday": {
+                                    "type": "object",
+                                    "properties": {
+                                        "marked": { "type": "boolean" },
+                                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                                    },
+                                    "required": ["marked", "confidence"]
+                                },
+                                "tuesday": {
+                                    "type": "object",
+                                    "properties": {
+                                        "marked": { "type": "boolean" },
+                                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                                    },
+                                    "required": ["marked", "confidence"]
+                                },
+                                "wednesday": {
+                                    "type": "object",
+                                    "properties": {
+                                        "marked": { "type": "boolean" },
+                                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                                    },
+                                    "required": ["marked", "confidence"]
+                                },
+                                "thursday": {
+                                    "type": "object",
+                                    "properties": {
+                                        "marked": { "type": "boolean" },
+                                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                                    },
+                                    "required": ["marked", "confidence"]
+                                },
+                                "friday": {
+                                    "type": "object",
+                                    "properties": {
+                                        "marked": { "type": "boolean" },
+                                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                                    },
+                                    "required": ["marked", "confidence"]
+                                },
+                                "saturday": {
+                                    "type": "object",
+                                    "properties": {
+                                        "marked": { "type": "boolean" },
+                                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                                    },
+                                    "required": ["marked", "confidence"]
+                                },
+                                "sunday": {
+                                    "type": "object",
+                                    "properties": {
+                                        "marked": { "type": "boolean" },
+                                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                                    },
+                                    "required": ["marked", "confidence"]
+                                }
+                            },
+                            "required": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
+                            "description": "Habit tracking for each day of the week (M T W T F S S order), indicating whether an X or checkmark appears before each day letter"
+                        },
+                        "reflect": {
+                            "type": "object",
+                            "properties": {
+                                "biggest_accomplishments": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "value": { "type": "string" },
+                                            "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                                        },
+                                        "required": ["value", "confidence"]
+                                    },
+                                    "description": "Biggest accomplishments from the week"
+                                },
+                                "habits_insights": {
+                                    "type": "object",
+                                    "properties": {
+                                        "value": { "type": "string" },
+                                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                                    },
+                                    "required": ["value", "confidence"],
+                                    "description": "Insights about habit formation and progress"
+                                },
+                                "meaningful_moments": {
+                                    "type": "object",
+                                    "properties": {
+                                        "value": { "type": "string" },
+                                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                                    },
+                                    "required": ["value", "confidence"],
+                                    "description": "Meaningful moments from the week"
+                                }
+                            },
+                            "required": ["biggest_accomplishments", "habits_insights", "meaningful_moments"],
+                            "description": "Weekly reflection sections"
+                        },
+                        "god_is_teaching_me": {
+                            "type": "object",
+                            "properties": {
+                                "value": { "type": "string" },
+                                "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                            },
+                            "required": ["value", "confidence"],
+                            "description": "Spiritual reflections and lessons learned"
+                        },
+                        "one_change_next_week": {
+                            "type": "object",
+                            "properties": {
+                                "value": { "type": "string" },
+                                "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                            },
+                            "required": ["value", "confidence"],
+                            "description": "One change to focus on for the upcoming week"
                         }
                     },
-                    "required": ["week_of", "weekly_priorities"]
+                    "required": ["week", "prepare_priority"]
                 }
             }
         }]
@@ -232,7 +404,7 @@ Here is an example of the expected output format for a Monk Manual weekly page:
                 ],
                 tools=tools,
                 tool_choice={"type": "function", "function": {"name": "extract_weekly_page"}},
-                max_tokens=1500
+                max_tokens=2500
             )
             
             content = response.choices[0].message.content

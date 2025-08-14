@@ -102,7 +102,7 @@ class MonthlyOCRAdapter(BaseOCR):
                 "confidence": 0.3
             }
 
-    def extract_text(self, image_path: str, category: str = "Month") -> str:
+    def extract_text(self, image_path: str, category: str = "Monthly") -> str:
         logger.info(f"Starting monthly page OCR extraction for image: {image_path}")
         
         # Read and encode the image

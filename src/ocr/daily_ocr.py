@@ -17,7 +17,7 @@ class DailyOCRAdapter(BaseOCR):
             raise ValueError("OPENAI_API_KEY environment variable is required")
         self.client = OpenAI(api_key=api_key)
 
-    def extract_text(self, image_path: str, category: str = "Day") -> str:
+    def extract_text(self, image_path: str, category: str = "Daily") -> str:
         logger.info(f"Starting daily page OCR extraction for image: {image_path}")
         
         # Read and encode the image
@@ -37,6 +37,12 @@ For daily pages:
 - "I AM GRATEFUL FOR": Things the user is grateful for.
 - "I'M LOOKING FORWARD TO": Things the user is looking forward to.
 - "HABIT": The habit that the user wants to work on this day.
+- "THEME": The theme or focus for the day.
+- "WAYS I CAN GIVE": Ways the user can give or serve others.
+- "REFLECT": General reflection section with highlights.
+- "I WAS AT MY BEST WHEN": When the user felt they performed at their best.
+- "I FELT UNREST WHEN": When the user felt unsettled or uncomfortable.
+- "ONE WAY I CAN IMPROVE TOMORROW": One specific improvement for the next day.
 - "DAILY": Hour-by-hour breakdown of the day.
 
 Your job is to:
@@ -44,6 +50,8 @@ Your job is to:
 - Extract the text content written under each section.
 - Return a JSON object with a key for each section and its content.
 - If a section is not present or has no content, leave it blank or null.
+
+For the "DAILY" section, be sure to allow for the possibility that there is no text for a given hour.  If there is no text for a given hour do not associate that hour with the text for the following hour.
 
 IMPORTANT: For each extracted item, provide a realistic confidence score (0.0 to 1.0) based on:
 - Text clarity and readability (clear text = higher confidence)
@@ -110,6 +118,32 @@ Here is an example of the expected output format for a Monk Manual daily page:
   "habit": {
     "value": "Leave work at work",
     "confidence": 0.82
+  },
+  "theme": {
+    "value": "Focus",
+    "confidence": 0.90
+  },
+  "ways_i_can_give": [
+    {
+      "item": "Patience and focus in staff meeting",
+      "confidence": 0.85
+    }
+  ],
+  "reflect": {
+    "value": "Finally finishing the monthly report",
+    "confidence": 0.88
+  },
+  "i_was_at_my_best_when": {
+    "value": "Leading the staff meeting",
+    "confidence": 0.92
+  },
+  "i_felt_unrest_when": {
+    "value": "Planning for the busy week ahead",
+    "confidence": 0.87
+  },
+  "one_way_i_can_improve_tomorrow": {
+    "value": "Finish work early and fit in an evening workout",
+    "confidence": 0.91
   },
   "daily": [
     {
@@ -207,6 +241,63 @@ Here is an example of the expected output format for a Monk Manual daily page:
                             },
                             "required": ["value", "confidence"],
                             "description": "Habit to focus on today"
+                        },
+                        "theme": {
+                            "type": "object",
+                            "properties": {
+                                "value": { "type": "string" },
+                                "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                            },
+                            "required": ["value", "confidence"],
+                            "description": "Theme or focus for the day"
+                        },
+                        "ways_i_can_give": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "item": { "type": "string" },
+                                    "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                                },
+                                "required": ["item", "confidence"]
+                            },
+                            "description": "Ways the user can give or serve others"
+                        },
+                        "reflect": {
+                            "type": "object",
+                            "properties": {
+                                "value": { "type": "string" },
+                                "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                            },
+                            "required": ["value", "confidence"],
+                            "description": "General reflection section with highlights"
+                        },
+                        "i_was_at_my_best_when": {
+                            "type": "object",
+                            "properties": {
+                                "value": { "type": "string" },
+                                "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                            },
+                            "required": ["value", "confidence"],
+                            "description": "When the user felt they performed at their best"
+                        },
+                        "i_felt_unrest_when": {
+                            "type": "object",
+                            "properties": {
+                                "value": { "type": "string" },
+                                "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                            },
+                            "required": ["value", "confidence"],
+                            "description": "When the user felt unsettled or uncomfortable"
+                        },
+                        "one_way_i_can_improve_tomorrow": {
+                            "type": "object",
+                            "properties": {
+                                "value": { "type": "string" },
+                                "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                            },
+                            "required": ["value", "confidence"],
+                            "description": "One specific improvement for the next day"
                         },
                         "daily": {
                             "type": "array",

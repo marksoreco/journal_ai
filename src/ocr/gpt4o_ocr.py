@@ -14,13 +14,13 @@ class GPT4oOCRAdapter(BaseOCR):
         self.weekly_ocr = WeeklyOCRAdapter()
         self.monthly_ocr = MonthlyOCRAdapter()
 
-    def extract_text(self, image_path: str, category: str = "Day") -> str:
+    def extract_text(self, image_path: str, category: str = "Daily") -> str:
         """
         Extract text from image using the appropriate page-specific OCR adapter.
         
         Args:
             image_path: Path to the image file
-            category: Page category - "Day", "Week", or "Month"
+            category: Page category - "Daily", "Weekly", or "Monthly"
             
         Returns:
             Extracted text as JSON string
