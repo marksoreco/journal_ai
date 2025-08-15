@@ -1733,8 +1733,10 @@
                 html += '<div style="margin-bottom: 1.5rem;">';
                 Object.entries(data.monthly_check_in).forEach(([category, rating]) => {
                     if (rating) {
-                        const progress = '●'.repeat(rating) + '○'.repeat(10 - rating);
-                        html += `<div style="margin-bottom: 0.5rem;"><strong>${category}:</strong> <span style="font-family: monospace; color: #4caf50;">${progress}</span> (${rating}/10)</div>`;
+                        const progress = '+'.repeat(rating) + '-'.repeat(10 - rating);
+                        // Pad category name to 18 characters for proper alignment
+                        const paddedCategory = category.padEnd(18);
+                        html += `<div style="margin-bottom: 0.5rem; font-family: 'Courier New', Courier, monospace; white-space: pre; font-weight: normal;">${paddedCategory}: <span style="color: #4caf50;">${progress}</span> (${rating}/10)</div>`;
                     }
                 });
                 html += '</div>';

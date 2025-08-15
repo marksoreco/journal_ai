@@ -180,13 +180,13 @@ Here is an example of the expected output format for a Monk Manual monthly page:
             "confidence": 0.8
         }
     ],
-    "prepare_priority": {
-        "1": {"value": "Establish morning routine", "confidence": 0.83},
-        "2": {"value": "Complete certification program", "confidence": 0.88},
-        "3": {"value": "Launch new product line", "confidence": 0.92},
-        "4": {"value": "Team training initiative", "confidence": 0.85},
-        "5": {"value": "Website redesign project", "confidence": 0.90}
-    },
+    "prepare_priority": [
+        {"task": "Establish morning routine", "confidence": 0.83},
+        {"task": "Complete certification program", "confidence": 0.88},
+        {"task": "Launch new product line", "confidence": 0.92},
+        {"task": "Team training initiative", "confidence": 0.85},
+        {"task": "Website redesign project", "confidence": 0.90}
+    ],
     "monthly_check_in": {
         "relationships": 1,
         "physical": 9,
@@ -273,50 +273,16 @@ Here is an example of the expected output format for a Monk Manual monthly page:
                             "description": "Calendar events with days and corresponding events"
                         },
                         "prepare_priority": {
-                            "type": "object",
-                            "properties": {
-                                "1": {
-                                    "type": "object",
-                                    "properties": {
-                                        "value": { "type": "string" },
-                                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
-                                    },
-                                    "required": ["value", "confidence"]
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "task": { "type": "string" },
+                                    "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
                                 },
-                                "2": {
-                                    "type": "object",
-                                    "properties": {
-                                        "value": { "type": "string" },
-                                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
-                                    },
-                                    "required": ["value", "confidence"]
-                                },
-                                "3": {
-                                    "type": "object",
-                                    "properties": {
-                                        "value": { "type": "string" },
-                                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
-                                    },
-                                    "required": ["value", "confidence"]
-                                },
-                                "4": {
-                                    "type": "object",
-                                    "properties": {
-                                        "value": { "type": "string" },
-                                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
-                                    },
-                                    "required": ["value", "confidence"]
-                                },
-                                "5": {
-                                    "type": "object",
-                                    "properties": {
-                                        "value": { "type": "string" },
-                                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
-                                    },
-                                    "required": ["value", "confidence"]
-                                }
+                                "required": ["task", "confidence"]
                             },
-                            "description": "Top 5 priorities for the month"
+                            "description": "Top priorities for the month"
                         },
                         "monthly_check_in": {
                             "type": "object",

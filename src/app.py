@@ -4,6 +4,7 @@ import atexit
 from fastapi import FastAPI, Depends
 from fastapi.responses import PlainTextResponse, FileResponse, JSONResponse
 from fastapi import UploadFile, File, HTTPException, Form
+from fastapi.staticfiles import StaticFiles
 from typing import List
 import os
 from dotenv import load_dotenv
@@ -12,6 +13,7 @@ from .ocr.ocr_factory import OCRFactory
 from .agents.tools.page_detector import PageTypeDetector
 from .agents.journal_processing_agent import JournalProcessingAgent
 from .auth_routes import router as auth_router
+from .chat.routes import router as chat_router
 from .gmail.auth import get_gmail_service
 from .gmail.client import GmailClient
 from datetime import datetime
@@ -41,7 +43,13 @@ except Exception as e:
     journal_agent = None
 
 app = FastAPI()
+
+# Mount static files
+static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
 app.include_router(auth_router)
+app.include_router(chat_router)
 
 # Pydantic models
 class GmailDataRequest(BaseModel):
@@ -66,6 +74,11 @@ def get_config():
 async def serve_index():
     """Serve the main UI - authentication checked by frontend"""
     return FileResponse(os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "index.html"))
+
+@app.get("/chat", response_class=FileResponse)
+async def serve_chat():
+    """Serve the chat UI - authentication checked by frontend"""
+    return FileResponse(os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "chat.html"))
 
 @app.post("/upload-to-todoist")
 async def upload_to_todoist(
