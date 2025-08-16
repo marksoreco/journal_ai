@@ -20,6 +20,24 @@ def get_function_tools() -> List[Dict]:
     """Get OpenAI function tool definitions"""
     return [
         {
+            "name": "route_user_intent",
+            "description": "Route user request to appropriate specialized agent (journal, gmail, or search)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_message": {
+                        "type": "string",
+                        "description": "The user's message to analyze for intent"
+                    },
+                    "session_context": {
+                        "type": "string", 
+                        "description": "Current session context for routing decisions"
+                    }
+                },
+                "required": ["user_message"]
+            }
+        },
+        {
             "name": "process_journal_image",
             "description": "Process a journal page image with OCR to extract structured content like tasks, events, and notes",
             "parameters": {
@@ -36,6 +54,20 @@ def get_function_tools() -> List[Dict]:
                     }
                 },
                 "required": ["file_id"]
+            }
+        },
+        {
+            "name": "upload_journal_to_pinecone",
+            "description": "Upload processed journal page OCR data to Pinecone vector database for future search",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ocr_data": {
+                        "type": "string",
+                        "description": "JSON string of OCR data from journal processing"
+                    }
+                },
+                "required": ["ocr_data"]
             }
         },
         {
@@ -119,8 +151,15 @@ def get_function_tools() -> List[Dict]:
 async def execute_function_call_stream(session: ChatSession, function_name: str, function_args: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
     """Execute a function call with streaming progress updates"""
     try:
-        if function_name == "process_journal_image":
+        if function_name == "route_user_intent":
+            async for progress_data in _route_user_intent_stream(session, **function_args):
+                yield progress_data
+        elif function_name == "process_journal_image":
             async for progress_data in _process_journal_image_stream(session, **function_args):
+                yield progress_data
+        elif function_name == "upload_journal_to_pinecone":
+            logger.info(f"Dispatching to upload_journal_to_pinecone with args: {function_args}")
+            async for progress_data in _upload_journal_to_pinecone_stream(session, **function_args):
                 yield progress_data
         elif function_name == "upload_to_todoist":
             async for progress_data in _upload_to_todoist_stream(session, **function_args):
@@ -1061,3 +1100,164 @@ async def _start_review_from_session_stream(session: ChatSession) -> AsyncGenera
     except Exception as e:
         logger.error(f"Error starting review from session stream: {str(e)}")
         yield {"type": "progress", "content": f"❌ Review start failed: {str(e)}"}
+
+async def _route_user_intent_stream(session: ChatSession, user_message: str, session_context: str = None) -> AsyncGenerator[Dict[str, Any], None]:
+    """Route user intent to appropriate agent with streaming progress"""
+    try:
+        yield {"type": "progress", "content": "🤖 Analyzing your request..."}
+        
+        from openai import OpenAI
+        client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        
+        # Simple intent classification using gpt-3.5-turbo
+        system_prompt = """You are an intent router. Classify user messages into exactly one category:
+- "journal": Processing journal pages, OCR, tasks, Todoist uploads
+- "gmail": Email downloads, Gmail API, email processing  
+- "search": Searching data, RAG queries, information retrieval
+- "general": Greetings, help, other general conversation
+
+Respond with only JSON: {"intent": "category", "confidence": 0.9}"""
+
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ],
+            temperature=0.1,
+            max_tokens=100
+        )
+        
+        result = json.loads(response.choices[0].message.content)
+        intent = result.get("intent", "general")
+        
+        yield {"type": "progress", "content": f"📋 Intent detected: {intent}"}
+        
+        # Store routing decision in session
+        session.processing_states["current_agent"] = intent
+        
+        yield {
+            "type": "function_result", 
+            "data": {
+                "success": True,
+                "intent": intent,
+                "confidence": result.get("confidence", 0.8),
+                "next_agent": intent,
+                "message": f"Routing to {intent} agent..."
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in routing: {str(e)}")
+        yield {"type": "progress", "content": f"❌ Routing failed: {str(e)}"}
+
+async def _upload_journal_to_pinecone_stream(session: ChatSession, ocr_data: str) -> AsyncGenerator[Dict[str, Any], None]:
+    """Upload journal OCR data to Pinecone vector database"""
+    try:
+        logger.info("Starting journal to Pinecone upload")
+        yield {"type": "progress", "content": "📊 Preparing journal data for vector storage..."}
+        
+        # Parse OCR data
+        import json
+        from datetime import datetime
+        import hashlib
+        
+        ocr_dict = json.loads(ocr_data)
+        
+        # Generate unique ID based on page type and date
+        # Determine page type from OCR data structure
+        page_type = "unknown"
+        if ocr_dict.get('page_type'):
+            page_type = ocr_dict['page_type'].lower()
+        elif 'month' in ocr_dict:
+            page_type = "monthly"
+        elif 'week_of' in ocr_dict or 'week' in ocr_dict:
+            page_type = "weekly" 
+        elif 'date' in ocr_dict:
+            page_type = "daily"
+        
+        # Extract date from OCR data based on page type
+        date_str = "unknown"
+        if page_type == "monthly" and ocr_dict.get('month'):
+            date_str = str(ocr_dict['month']).replace(" ", "_")
+        elif page_type == "weekly" and ocr_dict.get('week_of'):
+            date_str = str(ocr_dict['week_of']).replace(" ", "_")
+        elif page_type == "weekly" and ocr_dict.get('week'):
+            date_str = str(ocr_dict['week']).replace(" ", "_")
+        elif ocr_dict.get('date'):
+            if isinstance(ocr_dict['date'], dict):
+                date_str = ocr_dict['date'].get('value', 'unknown')
+            else:
+                date_str = str(ocr_dict['date'])
+                
+        date_str = date_str.replace(" ", "_").replace(",", "").replace("(", "").replace(")", "")
+        
+        # Create deterministic ID based on hash of page type and date (not content)
+        # This ensures the same journal page always gets the same ID regardless of OCR variations
+        id_string = f"{page_type}_{date_str}"
+        unique_id = hashlib.md5(id_string.encode()).hexdigest()[:16]
+        
+        yield {"type": "progress", "content": f"🔖 Generated ID: {unique_id}"}
+        
+        # Upload to Pinecone using separate journal index
+        yield {"type": "progress", "content": "🗃️ Uploading to Pinecone vector database..."}
+        
+        from pinecone import Pinecone, ServerlessSpec
+        
+        # Direct Pinecone client for journal-specific index
+        pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY'))
+        journal_index_name = "journal-sparse-index"
+        
+        # Create journal-specific sparse index if needed
+        if journal_index_name not in pc.list_indexes().names():
+            pc.create_index(
+                name=journal_index_name,
+                dimension=10000,  # Sparse dimension
+                metric="dotproduct",
+                spec=ServerlessSpec(
+                    cloud="aws", 
+                    region="us-east-1"
+                )
+            )
+        
+        index = pc.Index(journal_index_name)
+        
+        # Prepare metadata
+        metadata = {
+            "page_type": page_type,
+            "date": date_str,
+            "content_type": "journal_ocr",
+            "upload_timestamp": datetime.now().isoformat(),
+            "content": json.dumps(ocr_dict)
+        }
+        
+        # Create sparse vector from content hash
+        sparse_dimension = 10000
+        sparse_vector = [0.0] * sparse_dimension
+        hash_idx = hash(unique_id) % sparse_dimension
+        sparse_vector[hash_idx] = 1.0
+        
+        try:
+            index.upsert([{
+                "id": unique_id,
+                "values": sparse_vector,
+                "metadata": metadata
+            }])
+            yield {"type": "progress", "content": f"✅ Journal data stored in separate sparse index with ID: {unique_id}"}
+        except Exception as pinecone_error:
+            logger.error(f"Pinecone upsert failed: {str(pinecone_error)}")
+            yield {"type": "progress", "content": f"❌ Pinecone storage failed: {str(pinecone_error)}"}
+        
+        yield {
+            "type": "function_result",
+            "data": {
+                "success": True,
+                "pinecone_id": unique_id,
+                "page_type": page_type,
+                "date": date_str
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error uploading journal to Pinecone: {str(e)}")
+        yield {"type": "progress", "content": f"❌ Pinecone upload failed: {str(e)}"}

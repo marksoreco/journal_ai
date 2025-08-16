@@ -166,6 +166,10 @@ async def upload_file(
                 del session.processing_states['pending_review']
                 logger.info("Cleared old pending_review state for new file upload")
             
+            # Auto-route to journal agent when image files are uploaded
+            session.processing_states["current_agent"] = "journal"
+            logger.info("Auto-routed to journal agent due to image file upload")
+            
             logger.info(f"File uploaded successfully: {file.filename} -> {file_id}")
         
         result = {
