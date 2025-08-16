@@ -1,6 +1,6 @@
 __pycache__/
 .DS_Store
-.env
+.env*
 .venv
 .vscode/
 uploads/
@@ -19,3 +19,5 @@ src/todoist/cache/
 
 # Test artifacts  
 .pytest_cache/
+
+utilities/
