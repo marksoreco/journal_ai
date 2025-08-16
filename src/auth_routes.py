@@ -28,7 +28,7 @@ logger.info(f"OAuth Redirect URI: {OAUTH_REDIRECT_URI}")
 logger.info(f"Google Credentials Path: {GOOGLE_CREDENTIALS_PATH}")
 
 @router.get("/auth/google")
-async def auth_google(t: str = None):
+async def auth_google(t: str = None, redirect_to: str = "/ui"):
     try:
         logger.info(f"OAuth initiation requested. Timestamp: {t}")
         
@@ -50,10 +50,13 @@ async def auth_google(t: str = None):
             include_granted_scopes='true',
             prompt='consent'  # Force consent screen to appear
         )
-        # Store state in session or DB for verification (simplified here)
+        # Store state and redirect_to in session or DB for verification (simplified here)
         state_file = os.path.join(os.path.dirname(__file__), "gmail", "state.txt")
+        redirect_file = os.path.join(os.path.dirname(__file__), "gmail", "redirect.txt")
         with open(state_file, 'w') as f:
             f.write(state)
+        with open(redirect_file, 'w') as f:
+            f.write(redirect_to)
         logger.info(f"OAuth flow initiated. Redirecting to: {auth_url}")
         return RedirectResponse(url=auth_url)
     except Exception as e:
@@ -90,13 +93,22 @@ async def auth_google_callback(code: str, state: str):
             os.remove(lock_file)
             logger.info("Removed logout lock file after successful login")
         
+        # Get redirect URL
+        redirect_file = os.path.join(os.path.dirname(__file__), "gmail", "redirect.txt")
+        redirect_url = '/ui'  # Default
+        if os.path.exists(redirect_file):
+            with open(redirect_file, 'r') as f:
+                redirect_url = f.read().strip()
+            os.remove(redirect_file)
+        
         # Clean up state
         state_file = os.path.join(os.path.dirname(__file__), "gmail", "state.txt")
         if os.path.exists(state_file):
             os.remove(state_file)
         
-        # Redirect to the main UI after successful authentication
-        return RedirectResponse(url='/ui')
+        # Redirect to the appropriate UI after successful authentication
+        logger.info(f"Redirecting after successful authentication to: {redirect_url}")
+        return RedirectResponse(url=redirect_url)
     except Exception as e:
         logger.error(f"Error in OAuth callback: {str(e)}")
         raise HTTPException(status_code=500, detail="OAuth callback failed")
@@ -167,6 +179,17 @@ async def logout():
                 logger.error(f"Error removing state file: {e}")
         else:
             logger.info("State file not found")
+        
+        # Remove redirect.txt file
+        redirect_file = os.path.join(os.path.dirname(__file__), "gmail", "redirect.txt")
+        if os.path.exists(redirect_file):
+            try:
+                os.remove(redirect_file)
+                logger.info(f"Redirect file removed successfully: {redirect_file}")
+            except Exception as e:
+                logger.error(f"Error removing redirect file: {e}")
+        else:
+            logger.info("Redirect file not found")
         
         return JSONResponse({"status": "Logout successful", "message": "Credentials cleared"})
     except Exception as e:

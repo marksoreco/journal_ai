@@ -1,17 +1,13 @@
-import json
 import logging
-import atexit
+import json
 from fastapi import FastAPI, Depends
-from fastapi.responses import PlainTextResponse, FileResponse, JSONResponse
-from fastapi import UploadFile, File, HTTPException, Form
-from typing import List
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi import HTTPException
 import os
 from dotenv import load_dotenv
-from .todoist.todoist_client import TodoistClient
-from .ocr.ocr_factory import OCRFactory
-from .agents.tools.page_detector import PageTypeDetector
-from .agents.journal_processing_agent import JournalProcessingAgent
 from .auth_routes import router as auth_router
+from .chat.routes import router as chat_router
 from .gmail.auth import get_gmail_service
 from .gmail.client import GmailClient
 from datetime import datetime
@@ -29,21 +25,16 @@ from .logging_config import setup_logging
 from .config import LOG_LEVEL, LOG_FILE
 setup_logging(level=LOG_LEVEL, log_file=LOG_FILE)
 
-# Initialize OCR factory and agent
-ocr_factory = OCRFactory()
-
-# Initialize agent with error handling
-try:
-    journal_agent = JournalProcessingAgent()
-    logger.info("Journal processing agent initialized successfully")
-except Exception as e:
-    logger.error(f"Failed to initialize journal agent: {str(e)}")
-    journal_agent = None
-
 app = FastAPI()
-app.include_router(auth_router)
 
-# Pydantic models
+# Mount static files (only chat-related)
+static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+app.include_router(auth_router)
+app.include_router(chat_router)
+
+# Gmail data request model
 class GmailDataRequest(BaseModel):
     since_date: str
     limit: int
@@ -52,189 +43,14 @@ class GmailDataRequest(BaseModel):
 def system_status():
     return {"status": "ok", "message": "Journal AI is running"}
 
-@app.get("/config", response_class=JSONResponse)
-def get_config():
-    """Get application configuration for the frontend"""
-    from .todoist.config import TASK_CONFIDENCE_THRESHOLD
-    from .config import LOG_LEVEL
-    return {
-        "task_confidence_threshold": TASK_CONFIDENCE_THRESHOLD,
-        "log_level": LOG_LEVEL
-    }
+# Classic UI routes removed
 
-@app.get("/ui", response_class=FileResponse)
-async def serve_index():
-    """Serve the main UI - authentication checked by frontend"""
-    return FileResponse(os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "index.html"))
+@app.get("/chat", response_class=FileResponse)
+async def serve_chat():
+    """Serve the chat UI - authentication checked by frontend"""
+    return FileResponse(os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "chat.html"))
 
-@app.post("/upload-to-todoist")
-async def upload_to_todoist(
-    task_data: dict,
-    gmail_service = Depends(get_gmail_service)
-):
-    """
-    Upload tasks to Todoist from extracted OCR data
-    """
-    logger.info("Received request to upload tasks to Todoist")
-    try:
-        todoist_client = TodoistClient()
-        result = todoist_client.upload_tasks_from_ocr(task_data)
-        logger.info(f"Successfully uploaded tasks to Todoist: {result.get('message', 'Unknown result')}")
-        return result
-        
-    except Exception as e:
-        logger.error(f"Error uploading to Todoist: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error uploading to Todoist: {str(e)}")
-
-@app.post("/detect-page-type")
-async def detect_page_type(
-    file: UploadFile = File(...),
-    gmail_service = Depends(get_gmail_service)
-):
-    logger.info(f"Received page type detection request: {file.filename}")
-    
-    allowed_types = [
-        "image/jpeg",
-        "image/png"
-    ]
-    if file.content_type not in allowed_types:
-        logger.warning(f"Invalid image type received: {file.content_type}")
-        raise HTTPException(status_code=400, detail="Invalid image type. Allowed types: jpg, jpeg, and png.")
-
-    # Save the uploaded file temporarily
-    base_dir = os.path.abspath(os.path.dirname(__file__))
-    upload_dir = os.path.join(os.path.dirname(base_dir), "uploads")
-    os.makedirs(upload_dir, exist_ok=True)
-    filename = file.filename or "uploaded_image"
-    file_path = os.path.join(upload_dir, filename)
-    
-    logger.info(f"Saving uploaded file for detection to: {file_path}")
-    with open(file_path, "wb") as f:
-        f.write(await file.read())
-
-    # Detect page type using PageTypeDetector
-    try:
-        logger.info(f"Starting page type detection for: {filename}")
-        detector = PageTypeDetector()
-        detection_result = detector.detect_page_type(file_path)
-        
-        logger.info(f"Page type detection completed: {detection_result.page_type.value}")
-        
-        return {
-            "page_type": detection_result.page_type.value,
-            "reasoning": detection_result.reasoning,
-            "visual_indicators": detection_result.visual_indicators,
-            "filename": filename
-        }
-        
-    except Exception as e:
-        logger.error(f"Error during page type detection: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error detecting page type: {str(e)}")
-
-@app.post("/process-image-with-agent")
-async def process_image_with_agent(
-    file: UploadFile = File(...),
-    gmail_service = Depends(get_gmail_service)
-):
-    """Process journal image using LangChain agent workflow"""
-    logger.info(f"Received agent-based image processing request: {file.filename}")
-    
-    allowed_types = [
-        "image/jpeg",
-        "image/png"
-    ]
-    if file.content_type not in allowed_types:
-        logger.warning(f"Invalid image type received: {file.content_type}")
-        raise HTTPException(status_code=400, detail="Invalid image type. Allowed types: jpg, jpeg, and png.")
-
-    # Save the uploaded file temporarily
-    base_dir = os.path.abspath(os.path.dirname(__file__))
-    upload_dir = os.path.join(os.path.dirname(base_dir), "uploads")
-    os.makedirs(upload_dir, exist_ok=True)
-    filename = file.filename or "uploaded_image"
-    file_path = os.path.join(upload_dir, filename)
-    
-    logger.info(f"Saving uploaded file for agent processing to: {file_path}")
-    with open(file_path, "wb") as f:
-        f.write(await file.read())
-
-    # Process with LangChain agent
-    try:
-        if journal_agent is None:
-            raise HTTPException(status_code=500, detail="Journal agent not initialized")
-            
-        logger.info(f"Starting agent-based processing for: {filename}")
-        result = journal_agent.process_journal_image(file_path)
-        
-        if result["success"]:
-            logger.info(f"Agent processing completed successfully")
-            
-            # Get the stored OCR data and page type from the agent
-            ocr_data = journal_agent.last_ocr_data
-            page_type = journal_agent.last_page_type
-            agent_response = result["response"]
-            
-            return {
-                "success": True,
-                "response": agent_response,
-                "filename": filename,
-                "agent_used": True,
-                "ocr_data": ocr_data,
-                "page_type": page_type
-            }
-        else:
-            logger.error(f"Agent processing failed: {result['response']}")
-            raise HTTPException(status_code=500, detail=f"Agent processing failed: {result['response']}")
-        
-    except Exception as e:
-        logger.error(f"Error during agent processing: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error in agent processing: {str(e)}")
-
-@app.post("/upload-image")
-async def upload_image(
-    file: UploadFile = File(...),
-    category: str = Form(...),
-    gmail_service = Depends(get_gmail_service)
-):
-    logger.info(f"Received image upload request: {file.filename}, category: {category}")
-    
-    allowed_types = [
-        "image/jpeg",
-        "image/png"
-    ]
-    if file.content_type not in allowed_types:
-        logger.warning(f"Invalid image type received: {file.content_type}")
-        raise HTTPException(status_code=400, detail="Invalid image type. Allowed types: jpg, jpeg, and png.")
-    
-    allowed_categories = {"Daily", "Weekly", "Monthly"}
-    if category not in allowed_categories:
-        logger.warning(f"Invalid category received: {category}")
-        raise HTTPException(status_code=400, detail="Invalid category. Must be Daily, Weekly, or Monthly.")
-
-    # Save the uploaded file to disk
-    base_dir = os.path.abspath(os.path.dirname(__file__))
-    upload_dir = os.path.join(os.path.dirname(base_dir), "uploads")
-    os.makedirs(upload_dir, exist_ok=True)
-    filename = file.filename or "uploaded_image"
-    file_path = os.path.join(upload_dir, filename)
-    
-    logger.info(f"Saving uploaded file to: {file_path}")
-    with open(file_path, "wb") as f:
-        f.write(await file.read())
-
-    # OCR processing
-    logger.info(f"Starting OCR processing with category: {category}")
-    ocr_engine = ocr_factory.get_current_engine()
-    ocr_text = ocr_engine.extract_text(file_path, category)
-    logger.info(f"OCR processing completed successfully for category: {category}")
-    
-    return {
-        "filename": file.filename,
-        "content_type": file.content_type,
-        "category": category,
-        "ocr_text": ocr_text,
-        "message": "Image uploaded and processed successfully."
-    }
+# Classic UI endpoints removed - all processing now handled by chat interface
 
 @app.post("/gmail/fetch-data")
 async def fetch_gmail_data(

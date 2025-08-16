@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Journal AI - Chat Interface</title>
+    <link rel="stylesheet" href="/static/chat.css">
+</head>
+<body>
+    <header class="header">
+        <h1>Journal AI Chat</h1>
+        <nav class="nav-links">
+            <a href="#" id="clearSessionBtn" style="display: none;">Clear Session</a>
+            <a href="#" id="logoutBtn" style="display: none;">Logout</a>
+            <a href="/auth/google" id="loginBtn">Login</a>
+        </nav>
+    </header>
+
+    <div class="chat-container">
+        <div class="chat-messages" id="chatMessages">
+            <div class="welcome-message">
+                Welcome to Journal AI! I can help you process journal pages, manage tasks, and answer questions about your data.
+                <br><br>
+                Please <strong>Login</strong> to start chatting.
+            </div>
+        </div>
+
+        <div class="typing-indicator" id="typingIndicator">
+            <span>AI is typing</span>
+            <div class="typing-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+
+        <div class="chat-input-container">
+            <input 
+                type="file" 
+                id="fileInput" 
+                multiple 
+                accept="image/*" 
+                style="display: none;"
+            >
+            <button class="file-button" id="fileButton">📎</button>
+            <textarea 
+                class="chat-input" 
+                id="chatInput" 
+                placeholder="Type your message here..." 
+                rows="1"
+            ></textarea>
+            <button class="send-button" id="sendButton">Send</button>
+        </div>
+    </div>
+
+    <script>
+        let currentSessionId = null;
+        let isAuthenticated = false;
+
+        const chatMessages = document.getElementById('chatMessages');
+        const chatInput = document.getElementById('chatInput');
+        const sendButton = document.getElementById('sendButton');
+        const fileButton = document.getElementById('fileButton');
+        const fileInput = document.getElementById('fileInput');
+        const typingIndicator = document.getElementById('typingIndicator');
+        const loginBtn = document.getElementById('loginBtn');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const clearSessionBtn = document.getElementById('clearSessionBtn');
+
+        // Check authentication status
+        async function checkAuthentication() {
+            try {
+                console.log('Checking authentication status...');
+                const response = await fetch('/auth/status');
+                const result = await response.json();
+                
+                console.log('Auth status result:', result);
+                
+                if (result.authenticated) {
+                    isAuthenticated = true;
+                    loginBtn.style.display = 'none';
+                    logoutBtn.style.display = 'inline';
+                    clearSessionBtn.style.display = 'inline';
+                    console.log('User is authenticated');
+                    
+                    // Update welcome message for authenticated users
+                    const welcomeMsg = chatMessages.querySelector('.welcome-message');
+                    if (welcomeMsg) {
+                        welcomeMsg.innerHTML = `
+                            Welcome to Journal AI! I can help you process journal pages, manage tasks, and answer questions about your data.
+                            <br><br>
+                            <strong>Try saying:</strong> "Hello" or "Help me process a journal page"
+                        `;
+                    }
+                } else {
+                    isAuthenticated = false;
+                    loginBtn.style.display = 'inline';
+                    logoutBtn.style.display = 'none';
+                    clearSessionBtn.style.display = 'none';
+                    console.log('User is not authenticated');
+                    
+                    // Update welcome message for unauthenticated users
+                    const welcomeMsg = chatMessages.querySelector('.welcome-message');
+                    if (welcomeMsg) {
+                        welcomeMsg.innerHTML = `
+                            Welcome to Journal AI! I can help you process journal pages, manage tasks, and answer questions about your data.
+                            <br><br>
+                            Please <strong><a href="#" id="welcomeLoginLink" style="color: #007bff; text-decoration: none; cursor: pointer;">Login</a></strong> to start chatting.
+                        `;
+                        
+                        // Add click handler for the login link
+                        const welcomeLoginLink = welcomeMsg.querySelector('#welcomeLoginLink');
+                        if (welcomeLoginLink) {
+                            welcomeLoginLink.addEventListener('click', async (e) => {
+                                e.preventDefault();
+                                console.log('Login initiated from welcome message...');
+                                
+                                // Force clear any cached authentication state
+                                try {
+                                    await fetch('/auth/logout', { method: 'POST' });
+                                    console.log('Forced logout before login');
+                                } catch (error) {
+                                    console.error('Forced logout failed:', error);
+                                }
+                                
+                                // Redirect to Google OAuth with chat redirect
+                                window.location.href = '/auth/google?redirect_to=/chat';
+                            });
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('Authentication check failed:', err);
+                isAuthenticated = false;
+                loginBtn.style.display = 'inline';
+                logoutBtn.style.display = 'none';
+                clearSessionBtn.style.display = 'none';
+            }
+        }
+
+        // Format timestamp
+        function formatTime(timestamp) {
+            const date = new Date(timestamp);
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // Prefill user input field with text
+        function prefillUserInput(text) {
+            if (!text) return;
+            
+            // Set the input value
+            chatInput.value = text;
+            
+            // Focus the input field
+            chatInput.focus();
+            
+            // Select all text for easy editing
+            chatInput.select();
+            
+            // Auto-resize the textarea if needed
+            chatInput.style.height = 'auto';
+            chatInput.style.height = Math.min(chatInput.scrollHeight, 120) + 'px';
+            
+            console.log('Prefilled input with:', text);
+        }
+
+        // Add message to chat
+        function addMessage(content, type = 'user', timestamp = null) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+
+            const avatarDiv = document.createElement('div');
+            avatarDiv.className = 'message-avatar';
+            avatarDiv.textContent = type === 'user' ? 'You' : type === 'system' ? '📎' : 'AI';
+
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            
+            // Handle formatted content (markdown and progress steps) vs plain text
+            if (content.includes('**') || content.includes('##') || content.includes('- ') || content.includes('🔄') || content.includes('✅')) {
+                // Convert markdown formatting
+                let formattedContent = content
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold text
+                    .replace(/\*([^*]+)\*/g, '<em>$1</em>') // Italic text (single asterisk)
+                    .replace(/## (.*?)(\n|$)/g, '<h3>$1</h3>') // Headers
+                    .replace(/### (.*?)(\n|$)/g, '<h4>$1</h4>') // Sub-headers
+                    .replace(/^- (.*?)$/gm, '• $1') // Bullet points
+                    .replace(/^\d+\. (.*?)$/gm, '<div class="numbered-item">$1</div>') // Numbered lists
+                    .replace(/`([^`]+)`/g, '<code>$1</code>') // Inline code
+                    .replace(/\n/g, '<br>'); // Line breaks
+                contentDiv.innerHTML = formattedContent;
+            } else {
+                contentDiv.textContent = content;
+            }
+
+            if (timestamp) {
+                const timeDiv = document.createElement('div');
+                timeDiv.className = 'message-time';
+                timeDiv.textContent = formatTime(timestamp);
+                contentDiv.appendChild(timeDiv);
+            }
+
+            messageDiv.appendChild(avatarDiv);
+            messageDiv.appendChild(contentDiv);
+
+            // Remove welcome message if it exists
+            const welcomeMsg = chatMessages.querySelector('.welcome-message');
+            if (welcomeMsg) {
+                welcomeMsg.remove();
+            }
+
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Show error message
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.textContent = `Error: ${message}`;
+            chatMessages.appendChild(errorDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Add progress message for streaming updates
+        function addProgressMessage(content) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message assistant progress-message';
+
+            const avatarDiv = document.createElement('div');
+            avatarDiv.className = 'message-avatar';
+            avatarDiv.textContent = 'AI';
+
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content progress-content';
+            contentDiv.innerHTML = content;
+
+            messageDiv.appendChild(avatarDiv);
+            messageDiv.appendChild(contentDiv);
+
+            // Remove welcome message if it exists
+            const welcomeMsg = chatMessages.querySelector('.welcome-message');
+            if (welcomeMsg) {
+                welcomeMsg.remove();
+            }
+
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            
+            return messageDiv;
+        }
+
+        // Update progress message content
+        function updateProgressMessage(messageElement, newContent) {
+            const contentDiv = messageElement.querySelector('.progress-content');
+            if (contentDiv) {
+                // Add new progress line
+                contentDiv.innerHTML += '<br>' + newContent;
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+        }
+
+        // Send message to chat API with streaming support
+        async function sendMessage(message) {
+            if (!message.trim()) return;
+
+            if (!isAuthenticated) {
+                showError('Please login to use the chat feature.');
+                return;
+            }
+
+            // Add user message to UI
+            addMessage(message, 'user', new Date().toISOString());
+
+            // Disable input while processing
+            chatInput.disabled = true;
+            sendButton.disabled = true;
+            typingIndicator.style.display = 'flex';
+
+            try {
+                // Use streaming if the message might trigger function calling
+                const lowerMessage = message.toLowerCase().trim();
+                const shouldStream = lowerMessage.includes('process') || 
+                                   lowerMessage.includes('upload') || 
+                                   lowerMessage.includes('todoist') ||
+                                   lowerMessage.includes('gmail') ||
+                                   lowerMessage.includes('fetch') ||
+                                   lowerMessage === 'yes' || 
+                                   lowerMessage === 'y' || 
+                                   lowerMessage === 'sure' || 
+                                   lowerMessage === 'please' ||
+                                   lowerMessage === 'ok' ||
+                                   lowerMessage === 'okay' ||
+                                   lowerMessage.startsWith('yes,') ||
+                                   lowerMessage.startsWith('sure,') ||
+                                   lowerMessage.startsWith('please') ||
+                                   // Always use streaming during active review sessions
+                                   (typeof window.activeReviewSession !== 'undefined' && window.activeReviewSession === true);
+
+                if (shouldStream) {
+                    try {
+                        await sendMessageStream(message);
+                    } catch (streamError) {
+                        console.warn('Streaming failed, falling back to regular API:', streamError);
+                        // Fall back to regular API
+                        await sendMessageRegular(message);
+                    }
+                } else {
+                    await sendMessageRegular(message);
+                }
+
+            } catch (error) {
+                console.error('Chat error:', error);
+                showError(`Failed to send message: ${error.message}`);
+            } finally {
+                // Re-enable input
+                chatInput.disabled = false;
+                sendButton.disabled = false;
+                typingIndicator.style.display = 'none';
+                chatInput.focus();
+            }
+        }
+
+        // Regular non-streaming message
+        async function sendMessageRegular(message) {
+            const response = await fetch('/chat/message', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    message: message,
+                    session_id: currentSessionId
+                })
+            });
+
+            if (!response.ok) {
+                if (response.status === 401) {
+                    window.location.href = '/auth/google';
+                    return;
+                }
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+            
+            // Update session ID
+            currentSessionId = data.session_id;
+
+            // Add AI response to UI
+            addMessage(data.response, 'assistant', new Date().toISOString());
+        }
+
+        // Streaming message with real-time progress
+        async function sendMessageStream(message) {
+            return new Promise((resolve, reject) => {
+                // Create EventSource for streaming
+                const eventSource = new EventSource('/chat/message/stream?' + new URLSearchParams({
+                    message: message,
+                    session_id: currentSessionId || ''
+                }));
+
+                let progressMessageElement = null;
+                let finalResponse = '';
+
+                eventSource.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        
+                        if (data.type === 'start') {
+                            // Just set up for progress messages (first progress message will create the element)
+                            progressMessageElement = null;
+                            
+                        } else if (data.type === 'progress') {
+                            // Create progress message element if not exists, otherwise update it
+                            if (!progressMessageElement) {
+                                progressMessageElement = addProgressMessage(data.content);
+                            } else {
+                                updateProgressMessage(progressMessageElement, data.content);
+                            }
+                            
+                        } else if (data.type === 'keepalive') {
+                            // Just keep the connection alive, don't display anything
+                            console.log('Keepalive received');
+                            
+                        } else if (data.type === 'response') {
+                            // Final AI response (OCR results)
+                            currentSessionId = data.session_id;
+                            finalResponse = data.content;
+                            
+                            // Check if this indicates review completion
+                            if (finalResponse.includes('All items reviewed!') || 
+                                finalResponse.includes('Review completed') ||
+                                finalResponse.includes('Ready for Todoist upload')) {
+                                window.activeReviewSession = false;
+                            }
+                            
+                            // Remove progress message and add final response
+                            if (progressMessageElement) {
+                                progressMessageElement.remove();
+                            }
+                            addMessage(finalResponse, 'assistant', new Date().toISOString());
+                            
+                        } else if (data.type === 'followup') {
+                            // Follow-up question as separate message bubble
+                            currentSessionId = data.session_id;
+                            
+                            // Add a small delay for visual separation
+                            setTimeout(() => {
+                                addMessage(data.content, 'assistant', new Date().toISOString());
+                            }, 500);
+                            
+                        } else if (data.type === 'prefill_edit') {
+                            // Special message that prefills the user's input field
+                            currentSessionId = data.session_id;
+                            
+                            // Set flag to ensure streaming is used for review responses
+                            window.activeReviewSession = true;
+                            
+                            // Add the AI message if there's content
+                            if (data.content) {
+                                addMessage(data.content, 'assistant', new Date().toISOString());
+                            }
+                            
+                            // Prefill the input field after a brief delay
+                            setTimeout(() => {
+                                prefillUserInput(data.prefill_text);
+                            }, 300);
+                            
+                        } else if (data.type === 'error') {
+                            showError(data.content);
+                            if (progressMessageElement) {
+                                progressMessageElement.remove();
+                            }
+                            
+                        } else if (data.type === 'end') {
+                            eventSource.close();
+                            resolve();
+                        }
+                        
+                    } catch (error) {
+                        console.error('Error parsing streaming data:', error);
+                    }
+                };
+
+                eventSource.onerror = function(event) {
+                    console.error('EventSource error:', event);
+                    eventSource.close();
+                    
+                    // If we already got a final response, don't treat this as an error
+                    if (finalResponse) {
+                        console.log('Connection closed after receiving response - this is normal');
+                        resolve();
+                        return;
+                    }
+                    
+                    // Otherwise, treat as connection error and fall back
+                    if (progressMessageElement) {
+                        progressMessageElement.remove();
+                    }
+                    reject(new Error('Connection lost - falling back to standard processing'));
+                };
+
+                // Timeout after 5 minutes (journal processing can take time)
+                setTimeout(() => {
+                    if (eventSource.readyState !== EventSource.CLOSED) {
+                        eventSource.close();
+                        if (progressMessageElement) {
+                            progressMessageElement.remove();
+                        }
+                        reject(new Error('Request timeout - processing took longer than expected'));
+                    }
+                }, 300000);
+            });
+        }
+
+        // Handle send button click
+        sendButton.addEventListener('click', () => {
+            const message = chatInput.value;
+            chatInput.value = '';
+            sendMessage(message);
+        });
+
+        // Handle enter key in textarea
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                const message = chatInput.value;
+                chatInput.value = '';
+                sendMessage(message);
+            }
+        });
+
+        // Auto-resize textarea
+        chatInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        });
+
+        // Login functionality
+        loginBtn.addEventListener('click', async () => {
+            console.log('Login initiated...');
+            
+            // Force clear any cached authentication state
+            try {
+                await fetch('/auth/logout', { method: 'POST' });
+                console.log('Forced logout before login');
+            } catch (error) {
+                console.error('Forced logout failed:', error);
+            }
+            
+            // Redirect to Google OAuth with chat redirect
+            window.location.href = '/auth/google?redirect_to=/chat';
+        });
+
+        // Logout functionality
+        logoutBtn.addEventListener('click', async (e) => {
+            e.preventDefault(); // Prevent default link behavior
+            console.log('Logout initiated...');
+            logoutBtn.disabled = true;
+            
+            try {
+                const response = await fetch('/auth/logout', { method: 'POST' });
+                console.log('Logout response status:', response.status);
+                
+                // Clear current session
+                currentSessionId = null;
+                
+                // Clear review session flag
+                window.activeReviewSession = false;
+                
+                // Clear chat messages
+                chatMessages.innerHTML = `
+                    <div class="welcome-message">
+                        Welcome to Journal AI! Please login to start chatting.
+                    </div>
+                `;
+                
+            } catch (error) {
+                console.error('Logout request failed:', error);
+            }
+            
+            // Delay to ensure server processes logout
+            setTimeout(async () => {
+                await checkAuthentication();
+                logoutBtn.disabled = false;
+            }, 1000);
+        });
+
+        // Clear session functionality
+        clearSessionBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            if (!currentSessionId) {
+                addMessage('No active session to clear', 'system');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/chat/clear-session', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        session_id: currentSessionId
+                    })
+                });
+                
+                if (response.ok) {
+                    // Clear the chat messages
+                    chatMessages.innerHTML = `
+                        <div class="welcome-message">
+                            Session cleared! Upload a file to test the new formatting.
+                            <br><br>
+                            <strong>Try saying:</strong> "Hello" or "Help me process a journal page"
+                        </div>
+                    `;
+                    currentSessionId = null;
+                    window.activeReviewSession = false;
+                    addMessage('✅ Session cleared - fresh start!', 'system');
+                } else {
+                    addMessage('❌ Failed to clear session', 'system');
+                }
+            } catch (error) {
+                console.error('Clear session error:', error);
+                addMessage('❌ Error clearing session', 'system');
+            }
+        });
+
+        // File upload functionality
+        fileButton.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', async () => {
+            if (fileInput.files.length > 0) {
+                await uploadFiles(fileInput.files);
+                fileInput.value = ''; // Clear selection
+            }
+        });
+
+        // Upload files
+        async function uploadFiles(files) {
+            if (!isAuthenticated) {
+                showError('Please login to upload files.');
+                return;
+            }
+
+            const formData = new FormData();
+            for (let file of files) {
+                formData.append('files', file);
+            }
+            
+            if (currentSessionId) {
+                formData.append('session_id', currentSessionId);
+            }
+
+            try {
+                // Show uploading message
+                addMessage(`📎 Uploading ${files.length} file(s)...`, 'system');
+
+                const response = await fetch('/chat/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Upload failed: ${response.status}`);
+                }
+
+                const result = await response.json();
+                currentSessionId = result.session_id;
+
+                // Show upload success
+                const fileNames = result.files.map(f => f.filename).join(', ');
+                addMessage(`✅ Uploaded: ${fileNames}`, 'system');
+                
+                // Add separate message asking about processing
+                setTimeout(() => {
+                    addMessage('Would you like to process this journal page now?', 'system');
+                }, 500);
+
+            } catch (error) {
+                console.error('Upload error:', error);
+                showError(`Upload failed: ${error.message}`);
+            }
+        }
+
+        // Initialize
+        checkAuthentication();
+        chatInput.focus();
+    </script>
+</body>
+</html>

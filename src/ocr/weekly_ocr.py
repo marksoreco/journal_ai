@@ -25,6 +25,30 @@ class WeeklyOCRAdapter(BaseOCR):
             encoded_image = base64.b64encode(image_file.read()).decode('utf-8')
 
         # Create the multimodal prompt for weekly pages
+        
+        # BACKUP - Original detailed prompt (commented out due to hallucination issues):
+        # system_prompt = """
+        # You are an intelligent assistant that extracts structured entries from scanned weekly journal pages.
+        #
+        # These pages come from the Monk Manual weekly pages, which contain specific sections. Each page may include handwritten or printed text under the following headings:
+        #
+        # For weekly pages:
+        # - "WEEK": The date range of the week (e.g., "7/29 - 8/3").
+        # - "PREPARE - PRIORITY": Numbered priorities (1, 2, 3) for the week.
+        # - "TO-DO": Checklist items for weekly tasks. Each item may have an 'X', checkmark (✓), or similar completion mark at the beginning of the line before the text to indicate completion.
+        # - "PERSONAL GROWTH": Text about personal development goals.
+        # - "RELATIONSHIP(S) GROWTH": Text about relationship improvement goals.
+        # - "I'M LOOKING FORWARD TO": Numbered list (1, 2, 3) of anticipated events or activities.
+        # - "HABIT TRACKER": Grid showing days of the week (M T W T F S S) for tracking habits. Look for deliberate 'X' marks, checkmarks (✓), or dots that appear immediately BEFORE each day letter. These marks indicate habit completion for that day. Distinguish between intentional completion marks and accidental marks/smudges.
+        # - "REFLECT" section contains the sub-sections BIGGEST ACCOMPLISHMENTS, HABITS INSIGHTS, and MEANINGFUL MOMENTS, GOD IS TEACHING ME, and ONE CHANGE I CAN MAKE NEXT WEEK.
+        #   - "BIGGEST ACCOMPLISHMENTS": Numbered achievements from the week.  Part of the "REFLECT" section.
+        #   - "HABITS INSIGHTS": Reflections on habit formation and progress.  Part of the "REFLECT" section.
+        #   - "MEANINGFUL MOMENTS": Special moments or experiences from the week.  Part of the "REFLECT" section.
+        #   - "GOD IS TEACHING ME": Spiritual reflections or lessons learned.  Part of the "REFLECT" section.
+        #   - "ONE CHANGE I CAN MAKE NEXT WEEK": Single improvement focus for the upcoming week.  Part of the "REFLECT" section.
+        # """
+        
+        # SIMPLIFIED prompt (attempt to fix hallucinations):
         system_prompt = """
         You are an intelligent assistant that extracts structured entries from scanned weekly journal pages.
 
@@ -32,27 +56,24 @@ These pages come from the Monk Manual weekly pages, which contain specific secti
 
 For weekly pages:
 - "WEEK": The date range of the week (e.g., "7/29 - 8/3").
-- "PREPARE - PRIORITY": Numbered priorities (1, 2, 3) for the week.
-- "TO-DO": Checklist items for weekly tasks. Each item may have an 'X', checkmark (✓), or similar completion mark at the beginning of the line before the text to indicate completion.
-- "PERSONAL GROWTH": Text about personal development goals.
-- "RELATIONSHIP(S) GROWTH": Text about relationship improvement goals.
-- "I'M LOOKING FORWARD TO": Numbered list (1, 2, 3) of anticipated events or activities.
-- "HABIT TRACKER": Grid showing days of the week (M T W T F S S) for tracking habits. Look for deliberate 'X' marks, checkmarks (✓), or dots that appear immediately BEFORE each day letter. These marks indicate habit completion for that day. Distinguish between intentional completion marks and accidental marks/smudges.
-- "REFLECT" section containing:
-  - "BIGGEST ACCOMPLISHMENTS": Numbered achievements from the week.
-  - "HABITS INSIGHTS": Reflections on habit formation and progress.
-  - "MEANINGFUL MOMENTS": Special moments or experiences from the week.
-- "GOD IS TEACHING ME": Spiritual reflections or lessons learned.
-- "ONE CHANGE I CAN MAKE NEXT WEEK": Single improvement focus for the upcoming week.
+- "PREPARE - PRIORITY": Top priorities for the week.
+- "TO-DO": Weekly tasks to complete.
+- "PERSONAL GROWTH": Personal development focus for the week.
+- "RELATIONSHIP(S) GROWTH": Relationship improvement goals for the week.
+- "I'M LOOKING FORWARD TO": Things anticipated this week.
+- "HABIT TRACKER": Grid showing days of the week (M T W T F S S) for tracking habits.
+- "REFLECT" section contains the sub-sections BIGGEST ACCOMPLISHMENTS, HABITS INSIGHTS, and MEANINGFUL MOMENTS, GOD IS TEACHING ME, and ONE CHANGE I CAN MAKE NEXT WEEK.
+  - "BIGGEST ACCOMPLISHMENTS": Numbered achievements from the week.  Part of the "REFLECT" section.
+  - "HABITS INSIGHTS": Reflections on habit formation and progress.  Part of the "REFLECT" section.
+  - "MEANINGFUL MOMENTS": Special moments or experiences from the week.  Part of the "REFLECT" section.
+  - "GOD IS TEACHING ME": Spiritual reflections or lessons learned.  Part of the "REFLECT" section.
+  - "ONE CHANGE I CAN MAKE NEXT WEEK": Single improvement focus for the upcoming week.  Part of the "REFLECT" section.
 
 Your job is to:
-- Identify each section based on layout or header text.
+- Identify each section based on layout or header.
 - Extract the text content written under each section.
-- For TO-DO items, examine each line carefully. Look for 'X' marks, checkmarks (✓), or similar completion symbols at the very beginning of each line, immediately before the text. If there's a completion mark before the text, set "completed": true. If there's no mark or just a blank checkbox, set "completed": false.
-- For HABIT TRACKER, examine the habit tracker grid which shows days (M T W T F S S). Look for deliberate marks like 'X', checkmarks (✓), or dots that appear immediately BEFORE each day letter. The user writes completion marks before the day letter. Look carefully at the spacing and positioning - if there's an 'X' or similar mark positioned before a day letter (not just random marks), that indicates completion. Be reasonably confident in identifying intentional marks while avoiding obvious smudges or artifacts.
 - Return a JSON object with a key for each section and its content.
-- If a section is not present or has no content, include it with empty content.
-- If no text content is present for a line under a section, do not include that line in the json output.
+- If a section is not present or has no content, leave it blank or null.
 
 IMPORTANT: For each extracted item, provide a realistic confidence score (0.0 to 1.0) based on:
 - Text clarity and readability (clear text = higher confidence)
@@ -67,7 +88,7 @@ For HABIT TRACKER marks specifically:
 - Use low confidence (0.50-0.69) for questionable marks or poor image quality
 - When marking false (no mark detected), use high confidence if you're certain there's no mark
 
-For HABIT TRACKER, after initial processing double-check and triple-check that any items with "completed" set to false do not have an 'X' or checkmark (✓) or any other mark before the item text.  If they do, then set "completed" to true.
+For HABIT TRACKER, carefully examine each day position for marks that indicate completion.
 
 Confidence guidelines:
 - 0.90-1.0: Perfect clarity, printed text, or very neat handwriting
@@ -77,6 +98,8 @@ Confidence guidelines:
 - 0.50-0.59: Unclear text, significant uncertainty, possible errors
 - Below 0.50: Very unclear, likely incorrect interpretation
 
+IMPORTANT: For each extracted item, provide a realistic confidence score (0.0 to 1.0) based on text clarity, handwriting quality, completeness, and image quality.
+
 Here is an example of the expected output format for a Monk Manual weekly page:
 
 {
@@ -84,40 +107,40 @@ Here is an example of the expected output format for a Monk Manual weekly page:
     "value": "7/29 - 8/3",
     "confidence": 0.98
   },
-  "prepare_priority": {
-    "1": {"value": "Business Sale progress", "confidence": 0.94},
-    "2": {"value": "Exercise/Sleep", "confidence": 0.87},
-    "3": {"value": "Art Cog bootcamp", "confidence": 0.91}
-  },
+  "prepare_priority": [
+    {"task": "Complete project work", "confidence": 0.94},
+    {"task": "Health and exercise", "confidence": 0.87},
+    {"task": "Learning activities", "confidence": 0.91}
+  ],
   "to_do": [
     {
-      "item": "Oil and drain",
+      "item": "Weekly planning",
       "completed": true,
       "confidence": 0.89
     },
     {
-      "item": "RV DMV registration", 
+      "item": "Administrative tasks", 
       "completed": false,
       "confidence": 0.85
     },
     {
-      "item": "Take Billie out",
+      "item": "Personal errands",
       "completed": true,
       "confidence": 0.90
     }
   ],
   "personal_growth": {
-    "value": "Learning and wellness",
+    "value": "Focus on self-improvement",
     "confidence": 0.85
   },
   "relationships_growth": {
-    "value": "Quality time with Teresa, reconnect with Frank, Daniel",
+    "value": "Strengthen important relationships",
     "confidence": 0.78
   },
   "looking_forward_to": {
-    "1": {"value": "Creating sustainable solid", "confidence": 0.82},
-    "2": {"value": "Learning more about AI", "confidence": 0.88},
-    "3": {"value": "Being active", "confidence": 0.90}
+    "1": {"value": "Upcoming projects", "confidence": 0.82},
+    "2": {"value": "Personal activities", "confidence": 0.88},
+    "3": {"value": "Quality time", "confidence": 0.90}
   },
   "habit_tracker": {
     "monday": {"marked": true, "confidence": 0.88},
@@ -130,24 +153,25 @@ Here is an example of the expected output format for a Monk Manual weekly page:
   },
   "reflect": {
     "biggest_accomplishments": [
-      {"value": "Completed project milestone", "confidence": 0.89}
+      {"value": "Achieved important goal", "confidence": 0.89},
+      {"value": "Made significant progress", "confidence": 0.84}
     ],
     "habits_insights": {
-      "value": "Need to be more consistent with morning routine",
+      "value": "Working on consistency",
       "confidence": 0.75
     },
     "meaningful_moments": {
-      "value": "This is the Endless Elimination of Hurt - Enneagram 9/01",
+      "value": "Special moment with family",
       "confidence": 0.73
+    },
+    "god_is_teaching_me": {
+      "value": "Lessons in patience",
+      "confidence": 0.80
+    },
+    "one_change_next_week": {
+      "value": "Improve daily routine",
+      "confidence": 0.85
     }
-  },
-  "god_is_teaching_me": {
-    "value": "Patience and trust in His timing",
-    "confidence": 0.80
-  },
-  "one_change_next_week": {
-    "value": "Focus more on daily planning",
-    "confidence": 0.85
   }
 }
 """
@@ -170,34 +194,16 @@ Here is an example of the expected output format for a Monk Manual weekly page:
                             "description": "The date range of the week (e.g., '7/29 - 8/3')"
                         },
                         "prepare_priority": {
-                            "type": "object",
-                            "properties": {
-                                "1": {
-                                    "type": "object",
-                                    "properties": {
-                                        "value": { "type": "string" },
-                                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
-                                    },
-                                    "required": ["value", "confidence"]
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "task": { "type": "string" },
+                                    "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
                                 },
-                                "2": {
-                                    "type": "object",
-                                    "properties": {
-                                        "value": { "type": "string" },
-                                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
-                                    },
-                                    "required": ["value", "confidence"]
-                                },
-                                "3": {
-                                    "type": "object",
-                                    "properties": {
-                                        "value": { "type": "string" },
-                                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
-                                    },
-                                    "required": ["value", "confidence"]
-                                }
+                                "required": ["task", "confidence"]
                             },
-                            "description": "Top 3 priorities for the week"
+                            "description": "Top priorities for the week"
                         },
                         "to_do": {
                             "type": "array",
@@ -321,7 +327,7 @@ Here is an example of the expected output format for a Monk Manual weekly page:
                                 }
                             },
                             "required": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
-                            "description": "Habit tracking for each day of the week (M T W T F S S order), indicating whether an X or checkmark appears before each day letter"
+                            "description": "Habit tracking for each day of the week (M T W T F S S order).  The 'marked' property indicates whether an X or checkmark appears before each day letter"
                         },
                         "reflect": {
                             "type": "object",
@@ -355,31 +361,31 @@ Here is an example of the expected output format for a Monk Manual weekly page:
                                     },
                                     "required": ["value", "confidence"],
                                     "description": "Meaningful moments from the week"
+                                },
+                                "god_is_teaching_me": {
+                                    "type": "object",
+                                    "properties": {
+                                        "value": { "type": "string" },
+                                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                                    },
+                                    "required": ["value", "confidence"],
+                                    "description": "Spiritual reflections and lessons learned"
+                                },
+                                "one_change_next_week": {
+                                    "type": "object",
+                                    "properties": {
+                                        "value": { "type": "string" },
+                                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+                                    },
+                                    "required": ["value", "confidence"],
+                                    "description": "One change to focus on for the upcoming week"
                                 }
                             },
-                            "required": ["biggest_accomplishments", "habits_insights", "meaningful_moments"],
+                            "required": ["biggest_accomplishments", "habits_insights", "meaningful_moments", "god_is_teaching_me", "one_change_next_week"],
                             "description": "Weekly reflection sections"
-                        },
-                        "god_is_teaching_me": {
-                            "type": "object",
-                            "properties": {
-                                "value": { "type": "string" },
-                                "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
-                            },
-                            "required": ["value", "confidence"],
-                            "description": "Spiritual reflections and lessons learned"
-                        },
-                        "one_change_next_week": {
-                            "type": "object",
-                            "properties": {
-                                "value": { "type": "string" },
-                                "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
-                            },
-                            "required": ["value", "confidence"],
-                            "description": "One change to focus on for the upcoming week"
                         }
                     },
-                    "required": ["week", "prepare_priority"]
+                    "required": ["week", "prepare_priority", "to_do", "habit_tracker", "reflect", "personal_growth", "relationships_growth", "looking_forward_to"]
                 }
             }
         }]

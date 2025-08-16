@@ -215,7 +215,8 @@ class TodoistClient:
         # Collect regular to-do tasks
         if 'to_do' in task_data and task_data['to_do']:
             for task in task_data['to_do']:
-                task_content = task if isinstance(task, str) else task.get('task', '')
+                # to_do items use 'item' field, not 'task' field
+                task_content = task if isinstance(task, str) else (task.get('task', '') or task.get('item', ''))
                 if task_content.strip():
                     new_tasks.append(task_content)
                     task_metadata[task_content] = {'type': 'todo', 'priority': 3}
