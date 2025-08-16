@@ -29,8 +29,8 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.SERVICE_ACCOUNT_EMAIL }}
-          project_id: ${{ env.PROJECT_ID }}
+          service_account: ${{ vars.SA_EMAIL }}
+          project_id: ${{ vars.PROJECT_ID }}
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
@@ -88,4 +88,4 @@ jobs:
             --set-env-vars SECRET_KEY=${{ steps.secret.outputs.secret_key }}
 
       - name: Output final URL
-        run: echo "Deployed: ${{ steps.svc.outputs.url }}"
+        run: echo "Deployed to ${{ steps.svc.outputs.url }}"
