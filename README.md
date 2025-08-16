@@ -8,7 +8,8 @@ A comprehensive FastAPI application for intelligent journal processing through a
 - **Intelligent Journal OCR Processing**: Specialized OCR adapters for Day/Week/Month journal pages using GPT-4o vision
 - **Low-Confidence Item Review**: Interactive prefill editing system for uncertain OCR results before Todoist upload
 - **Streaming Function Execution**: Real-time progress updates during OCR processing and task operations
-- **Todoist Integration**: Automatically create tasks from extracted text with intelligent duplicate detection
+- **Vector Database Storage**: Store journal OCR data in Pinecone with deterministic IDs for searchable history
+- **Todoist Integration**: Automatically create tasks from extracted text with intelligent duplicate detection  
 - **Gmail RAG System**: Process emails, generate embeddings, and store in Pinecone vector database
 - **OAuth Authentication**: Secure Gmail API integration with token management
 - **SBERT Intelligence**: Advanced semantic similarity for duplicate detection using sentence transformers
@@ -29,6 +30,10 @@ pip install -r requirements.txt
 OPENAI_API_KEY=your-openai-api-key-here
 TODOIST_API_TOKEN=your-todoist-api-token-here
 PINECONE_API_KEY=your-pinecone-api-key-here
+
+# Pinecone Configuration (optional - defaults will be used)
+PINECONE_DENSE_INDEX=email-dense-index
+PINECONE_SPARSE_INDEX=email-sparse-index
 
 # Gmail OAuth Configuration  
 GOOGLE_REDIRECT_URI=http://localhost:8000/auth/google/callback
@@ -69,7 +74,7 @@ journal_ai/
 │   ├── chat/               # Conversational AI system
 │   │   ├── routes.py       # Chat API endpoints
 │   │   ├── chat_service.py # OpenAI integration & function calling
-│   │   ├── function_tools.py # Chat function implementations
+│   │   ├── function_tools.py # Chat function implementations (journal OCR, Pinecone storage, Todoist, Gmail)
 │   │   ├── models.py       # Chat data models
 │   │   ├── session_manager.py # Session state management
 │   │   └── ocr_formatter.py   # OCR results formatting
@@ -140,25 +145,33 @@ journal_ai/
 - **Index-based Matching**: Reliable item updates using array positions
 - **Todoist Integration**: Seamless transition from review to task creation
 
-### 4. Advanced Function Calling System
+### 4. Journal Data Storage System
+- **Vector Database Storage**: Automatic storage of OCR data in Pinecone for future search
+- **Deterministic IDs**: Same journal page always gets same ID (based on page type + date hash)
+- **Separate Journal Index**: Dedicated sparse vector index for journal data (`journal-sparse-index`)
+- **Smart Page Type Detection**: Auto-detects Daily/Weekly/Monthly from data structure
+- **Metadata Storage**: Stores page type, date, content type, and upload timestamp
+- **Workflow Integration**: Storage occurs before Todoist upload with optional low-confidence review
+
+### 5. Advanced Function Calling System  
 - **Streaming Functions**: Real-time progress updates during long operations
 - **Session State Management**: Tracks processing states across conversations
 - **Function Result Handling**: Proper data flow between streaming functions
 - **Error Recovery**: Graceful handling of processing failures
 
-### 5. Gmail RAG System
+### 6. Gmail RAG System
 - **OAuth Integration**: Secure Gmail authentication through chat interface
 - **Email Processing**: Fetch, clean, and vectorize email content
 - **Pinecone Storage**: Vector database integration with duplicate prevention
 - **Date Filtering**: Configurable date ranges for email fetching
 
-### 6. Todoist Integration
+### 7. Todoist Integration
 - **Intelligent Duplicate Detection**: SBERT-based semantic similarity analysis
 - **Task Creation**: Automatic task creation from OCR-extracted items
 - **Priority Support**: Handles both priority tasks and regular to-do items
 - **Due Date Parsing**: Smart date extraction from journal pages
 
-### 7. SBERT Intelligence
+### 8. SBERT Intelligence
 - **Sentence Embeddings**: Advanced semantic understanding using transformers
 - **Persistent Caching**: Performance optimization for repeated operations
 - **Configurable Thresholds**: Adjustable similarity detection settings
@@ -180,17 +193,20 @@ AI: "Hello! I'd be happy to help you process your journal page. Please upload th
 User: [uploads daily page image]
 AI: "I can see this is a Daily journal page. Let me process it for you..."
 [Processing updates stream in real-time]
-AI: "Processing complete! I found 3 priority tasks and 5 to-do items. Would you like to upload any tasks to Todoist?"
+AI: "Processing complete! I found 3 priority tasks and 5 to-do items. Store journal data in database?"
 
-User: "Yes, upload to Todoist"
-AI: "I found 2 low-confidence items in italics. Would you like to review these before uploading?"
+User: "Yes"
+AI: "I found 2 low-confidence items in italics. Would you like to review these before storing in database?"
 
 User: "Yes, let me review them"
 AI: "Item 1 of 2 (Confidence: 75%): [pre-fills with detected text]"
 User: [edits text and presses Enter]
 AI: "Item 2 of 2 (Confidence: 80%): [pre-fills with next item]"
 User: [accepts as-is by pressing Enter]
-AI: "Review complete! Uploading to Todoist... Successfully created 8 tasks, skipped 2 duplicates."
+AI: "Review complete! Storing in database... ✅ Journal data stored with ID: daily_2018-11-12_a1b2c3d4e5f6. Would you like to upload any tasks to Todoist?"
+
+User: "Yes, upload to Todoist"
+AI: "Uploading to Todoist... Successfully created 8 tasks, skipped 2 duplicates."
 ```
 
 ## API Endpoints
