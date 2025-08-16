@@ -91,43 +91,6 @@ def get_function_tools() -> List[Dict]:
             }
         },
         {
-            "name": "start_low_confidence_review",
-            "description": "Start reviewing low-confidence items from journal processing",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "low_confidence_items": {
-                        "type": "string",
-                        "description": "JSON string of low-confidence items from journal processing"
-                    },
-                    "ocr_data": {
-                        "type": "string", 
-                        "description": "JSON string of the original OCR data"
-                    }
-                },
-                "required": ["low_confidence_items", "ocr_data"]
-            }
-        },
-        {
-            "name": "review_confidence_item",
-            "description": "Process user's response for a low-confidence item review",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "action": {
-                        "type": "string",
-                        "enum": ["keep", "edit", "skip"],
-                        "description": "Action to take with the current item: keep, edit, or skip"
-                    },
-                    "edited_text": {
-                        "type": "string",
-                        "description": "New text for the item (required if action is 'edit')"
-                    }
-                },
-                "required": ["action"]
-            }
-        },
-        {
             "name": "process_edited_item",
             "description": "Process user's edited or accepted low-confidence item text",
             "parameters": {
@@ -152,31 +115,6 @@ def get_function_tools() -> List[Dict]:
         }
     ]
 
-async def execute_function_call(session: ChatSession, function_name: str, function_args: Dict[str, Any]) -> Dict[str, Any]:
-    """Execute a function call and return results"""
-    try:
-        if function_name == "process_journal_image":
-            return await _process_journal_image(session, **function_args)
-        elif function_name == "upload_to_todoist":
-            return await _upload_to_todoist(session, **function_args)
-        elif function_name == "fetch_gmail_data":
-            return await _fetch_gmail_data(session, **function_args)
-        elif function_name == "detect_page_type":
-            return await _detect_page_type(session, **function_args)
-        elif function_name == "start_low_confidence_review":
-            return await _start_low_confidence_review(session, **function_args)
-        elif function_name == "review_confidence_item":
-            return await _review_confidence_item(session, **function_args)
-        elif function_name == "process_edited_item":
-            return await _process_edited_item(session, **function_args)
-        elif function_name == "start_review_from_session":
-            return await _start_review_from_session(session, **function_args)
-        else:
-            return {"error": f"Unknown function: {function_name}"}
-            
-    except Exception as e:
-        logger.error(f"Error executing function {function_name}: {str(e)}")
-        return {"error": f"Function execution failed: {str(e)}"}
 
 async def execute_function_call_stream(session: ChatSession, function_name: str, function_args: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
     """Execute a function call with streaming progress updates"""
@@ -192,12 +130,6 @@ async def execute_function_call_stream(session: ChatSession, function_name: str,
                 yield progress_data
         elif function_name == "detect_page_type":
             async for progress_data in _detect_page_type_stream(session, **function_args):
-                yield progress_data
-        elif function_name == "start_low_confidence_review":
-            async for progress_data in _start_low_confidence_review_stream(session, **function_args):
-                yield progress_data
-        elif function_name == "review_confidence_item":
-            async for progress_data in _review_confidence_item_stream(session, **function_args):
                 yield progress_data
         elif function_name == "process_edited_item":
             async for progress_data in _process_edited_item_stream(session, **function_args):
@@ -440,16 +372,31 @@ async def _process_journal_image_stream(session: ChatSession, file_id: str, page
             formatted_content = f"**{detected_page_type} Page**\n\nProcessing completed but formatting failed: {str(format_error)}\n\nRaw data available for manual review."
             low_confidence_items = []  # Empty list if formatting fails
         
-        # Store results in session for AI response handler
-        # CACHING DISABLED: Do not store processing results
-        # session.processing_states[file_id] = {
-        #     "status": "completed", 
-        #     "formatted_content": formatted_content,
-        #     "page_type": detected_page_type,
-        #     "ocr_data": ocr_result,
-        #     "filename": file_info["filename"]
-        # }
-        logger.info("Caching disabled - processing results not stored")
+        # Store results in session for potential low-confidence review
+        try:
+            session.processing_states['pending_review'] = {
+                'has_items': len(low_confidence_items) > 0,
+                'low_confidence_items': low_confidence_items,
+                'ocr_data': ocr_data,
+                'page_type': detected_page_type
+            }
+            yield {"type": "progress", "content": "💾 Results saved to session"}
+        except Exception as e:
+            yield {"type": "progress", "content": f"⚠️ Could not save to session: {str(e)}"}
+        
+        yield {"type": "progress", "content": "🎉 Journal processing completed successfully!"}
+        
+        # Yield the final result for AI to process
+        yield {
+            "type": "function_result",
+            "data": {
+                "success": True,
+                "formatted_content": formatted_content,
+                "page_type": detected_page_type,
+                "low_confidence_items": low_confidence_items,
+                "ocr_data": ocr_data
+            }
+        }
         
     except Exception as e:
         logger.error(f"Error in streaming process_journal_image: {str(e)}")
@@ -462,45 +409,36 @@ def _apply_reviewed_items_to_ocr_data(original_data: Dict[str, Any], reviewed_it
         import copy
         updated_data = copy.deepcopy(original_data)
         
-        # Create a mapping of original item text to new reviewed item
-        reviewed_map = {}
-        for item in reviewed_items:
-            original_text = item['original_item'].get('task') or item['original_item'].get('item') or item['original_item'].get('value')
-            if original_text:
-                reviewed_map[original_text] = item
+        # Create index-based mapping instead of text-based
+        logger.info(f"Processing {len(reviewed_items)} reviewed items for OCR data update")
         
-        def update_item(item, section_name):
-            """Helper to update an individual item"""
-            if isinstance(item, dict):
-                text = item.get('task') or item.get('item') or item.get('value')
-                if text and text in reviewed_map:
-                    # Update with reviewed version
-                    reviewed = reviewed_map[text]
-                    if item.get('task'):
-                        item['task'] = reviewed['text'] 
-                    elif item.get('item'):
-                        item['item'] = reviewed['text']
-                    elif item.get('value'):
-                        item['value'] = reviewed['text']
-                    item['confidence'] = reviewed['confidence']
+        for review_item in reviewed_items:
+            section = review_item.get('section')  # e.g., 'prepare_priority'
+            item_index = review_item.get('item_index')
+            field_name = review_item.get('field_name', 'task')
+            new_text = review_item.get('text')
+            
+            logger.info(f"Processing review item: section='{section}', index={item_index}, field='{field_name}'")
+            logger.info(f"  Original -> New: '{review_item.get('original_item', {}).get(field_name, 'N/A')}' -> '{new_text}'")
+            
+            # Use direct index-based update
+            if section and item_index is not None and updated_data.get(section):
+                section_items = updated_data[section]
+                if isinstance(section_items, list) and item_index < len(section_items):
+                    target_item = section_items[item_index]
+                    if isinstance(target_item, dict):
+                        old_text = target_item.get(field_name, 'N/A')
+                        target_item[field_name] = new_text
+                        target_item['confidence'] = review_item.get('confidence', 1.0)
+                        logger.info(f"✅ Updated {section}[{item_index}].{field_name}: '{old_text}' -> '{new_text}'")
+                    else:
+                        logger.error(f"❌ Target item is not a dict: {target_item}")
+                else:
+                    logger.error(f"❌ Invalid index {item_index} for section '{section}' (length: {len(section_items) if isinstance(section_items, list) else 'not a list'})")
+            else:
+                logger.error(f"❌ Missing data: section='{section}', index={item_index}, section_exists={section in updated_data if updated_data else False}")
         
-        # Update priority tasks
-        if updated_data.get('prepare_priority'):
-            for item in updated_data['prepare_priority']:
-                update_item(item, 'Priority Tasks')
-        
-        # Update to-do items
-        if updated_data.get('to_do'):
-            for item in updated_data['to_do']:
-                update_item(item, 'To-Do Items')
-        
-        # Update personal growth
-        if updated_data.get('personal_growth'):
-            update_item(updated_data['personal_growth'], 'Personal Growth')
-        
-        # Update relationships growth
-        if updated_data.get('relationships_growth'):
-            update_item(updated_data['relationships_growth'], 'Relationship Growth')
+        logger.info("Index-based OCR data update completed")
         
         return updated_data
         
@@ -629,6 +567,18 @@ async def _upload_to_todoist_stream(session: ChatSession, task_data: str, review
         # Use existing Todoist client
         yield {"type": "progress", "content": "🚀 Uploading tasks to Todoist..."}
         await asyncio.sleep(0.5)
+        
+        # Debug: Log what we're actually uploading
+        if has_reviewed_items:
+            logger.info("=== UPLOADING WITH REVIEWED ITEMS ===")
+            for section, items in parsed_data.items():
+                if isinstance(items, list) and items:
+                    logger.info(f"Section '{section}': {len(items)} items")
+                    for i, item in enumerate(items):
+                        if isinstance(item, dict):
+                            text = item.get('task') or item.get('item') or item.get('value', 'No text')
+                            confidence = item.get('confidence', 'No confidence')
+                            logger.info(f"  Item {i+1}: '{text}' (confidence: {confidence})")
         
         todoist_client = TodoistClient()
         result = todoist_client.upload_tasks_from_ocr(parsed_data)
@@ -844,181 +794,8 @@ async def _detect_page_type(session: ChatSession, file_id: str) -> Dict[str, Any
             "progress": progress_updates
         }
 
-async def _start_low_confidence_review(session: ChatSession, low_confidence_items: str, ocr_data: str) -> Dict[str, Any]:
-    """Start the low-confidence item review process"""
-    try:
-        progress_updates = []
-        progress_updates.append("🔍 Starting low-confidence item review...")
-        
-        # Parse the JSON strings
-        import json
-        items = json.loads(low_confidence_items)
-        ocr_dict = json.loads(ocr_data)
-        
-        if not items:
-            progress_updates.append("✅ No low-confidence items to review")
-            return {
-                "success": True,
-                "message": "No low-confidence items found",
-                "progress": progress_updates
-            }
-        
-        # Set up review state in session
-        session.set_low_confidence_review_state(items, ocr_dict)
-        
-        # Get first item to review
-        first_item = items[0]
-        progress_updates.append(f"📝 Ready to review {len(items)} low-confidence items")
-        
-        return {
-            "success": True,
-            "message": f"I found {len(items)} low-confidence items that need review. For each of the following items, make any necessary edits, if any, then press Enter to accept.",
-            "total_items": len(items),
-            "start_prefill_editing": True,
-            "current_item": {
-                "text": first_item["text"],
-                "confidence": first_item["confidence"],
-                "section": first_item["section"],
-                "index": 1
-            },
-            "progress": progress_updates
-        }
-        
-    except Exception as e:
-        logger.error(f"Error starting low-confidence review: {str(e)}")
-        return {
-            "error": str(e)
-        }
 
-async def _review_confidence_item(session: ChatSession, action: str, edited_text: str = None) -> Dict[str, Any]:
-    """Process the user's review of a low-confidence item"""
-    try:
-        progress_updates = []
-        
-        # Get current review state
-        review_state = session.get_low_confidence_review_state()
-        if not review_state or not review_state.get('active'):
-            return {
-                "error": "No active review session found"
-            }
-        
-        current_index = review_state['current_index']
-        current_item = review_state['items'][current_index]
-        
-        # Process the action
-        progress_updates.append(f"📝 Processing action '{action}' for item: {current_item['text'][:50]}...")
-        
-        # Update the review
-        is_complete = session.update_low_confidence_review(action, edited_text)
-        
-        if action == "keep":
-            progress_updates.append("✅ Item kept as-is")
-        elif action == "edit":
-            progress_updates.append(f"✏️ Item updated to: {edited_text}")
-        elif action == "skip":
-            progress_updates.append("⏭️ Item skipped")
-        
-        if is_complete:
-            # Review is complete
-            progress_updates.append("🎉 Review complete! All items processed.")
-            
-            # Get reviewed items for upload
-            reviewed_items = review_state.get('reviewed_items', [])
-            
-            return {
-                "success": True,
-                "message": "Review completed",
-                "review_complete": True,
-                "reviewed_items_count": len(reviewed_items),
-                "progress": progress_updates
-            }
-        else:
-            # More items to review
-            next_index = review_state['current_index']
-            next_item = review_state['items'][next_index]
-            
-            progress_updates.append(f"➡️ Moving to next item ({next_index + 1}/{len(review_state['items'])})")
-            
-            return {
-                "success": True,
-                "message": "Item processed, continue review",
-                "review_complete": False,
-                "current_item": {
-                    "text": next_item["text"],
-                    "confidence": next_item["confidence"], 
-                    "section": next_item["section"],
-                    "index": next_index + 1
-                },
-                "total_items": len(review_state['items']),
-                "progress": progress_updates
-            }
-        
-    except Exception as e:
-        logger.error(f"Error reviewing confidence item: {str(e)}")
-        return {
-            "error": str(e)
-        }
 
-async def _start_low_confidence_review_stream(session: ChatSession, low_confidence_items: str, ocr_data: str) -> AsyncGenerator[Dict[str, Any], None]:
-    """Start low-confidence review with streaming progress"""
-    try:
-        yield {"type": "progress", "content": "🔍 Starting low-confidence item review..."}
-        await asyncio.sleep(0.2)
-        
-        # Parse the JSON strings
-        import json
-        items = json.loads(low_confidence_items)
-        ocr_dict = json.loads(ocr_data)
-        
-        if not items:
-            yield {"type": "progress", "content": "✅ No low-confidence items to review"}
-            return
-        
-        # Set up review state in session
-        session.set_low_confidence_review_state(items, ocr_dict)
-        
-        yield {"type": "progress", "content": f"📝 Ready to review {len(items)} low-confidence items"}
-        
-    except Exception as e:
-        logger.error(f"Error starting low-confidence review stream: {str(e)}")
-        yield {"type": "progress", "content": f"❌ Review start failed: {str(e)}"}
-
-async def _review_confidence_item_stream(session: ChatSession, action: str, edited_text: str = None) -> AsyncGenerator[Dict[str, Any], None]:
-    """Process low-confidence item review with streaming progress"""
-    try:
-        yield {"type": "progress", "content": f"📝 Processing '{action}' action..."}
-        await asyncio.sleep(0.2)
-        
-        # Get current review state
-        review_state = session.get_low_confidence_review_state()
-        if not review_state or not review_state.get('active'):
-            yield {"type": "progress", "content": "❌ No active review session found"}
-            return
-        
-        current_index = review_state['current_index']
-        current_item = review_state['items'][current_index]
-        
-        # Update the review
-        is_complete = session.update_low_confidence_review(action, edited_text)
-        
-        if action == "keep":
-            yield {"type": "progress", "content": "✅ Item kept as-is"}
-        elif action == "edit":
-            yield {"type": "progress", "content": f"✏️ Item updated"}
-        elif action == "skip":
-            yield {"type": "progress", "content": "⏭️ Item skipped"}
-        
-        await asyncio.sleep(0.3)
-        
-        if is_complete:
-            yield {"type": "progress", "content": "🎉 Review complete! All items processed."}
-        else:
-            next_index = review_state['current_index']
-            yield {"type": "progress", "content": f"➡️ Moving to next item ({next_index + 1}/{len(review_state['items'])})"}
-        
-    except Exception as e:
-        logger.error(f"Error in review confidence item stream: {str(e)}")
-        yield {"type": "progress", "content": f"❌ Review failed: {str(e)}"}
 
 async def _process_edited_item(session: ChatSession, item_text: str) -> Dict[str, Any]:
     """Process a user-edited or accepted low-confidence item"""
@@ -1124,10 +901,17 @@ async def _process_edited_item_stream(session: ChatSession, item_text: str) -> A
             edited_item = current_item.copy()
             edited_item['text'] = item_text.strip()
             edited_item['confidence'] = 1.0
+            # Preserve the original_item reference for OCR data updating
+            edited_item['original_item'] = current_item['original_item']
             review_state['reviewed_items'].append(edited_item)
+            
+            # Debug logging
+            logger.info(f"EDITED ITEM - Original: '{original_text}' -> New: '{item_text.strip()}'")
+            logger.info(f"Original item keys: {list(current_item['original_item'].keys())}")
         else:
             yield {"type": "progress", "content": "✅ Item accepted as-is"}
             review_state['reviewed_items'].append(current_item)
+            logger.info(f"ACCEPTED ITEM - Text: '{original_text}'")
         
         await asyncio.sleep(0.3)
         

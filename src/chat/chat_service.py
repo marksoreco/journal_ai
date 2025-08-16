@@ -7,7 +7,7 @@ import os
 from typing import Dict, List, Any, Optional, AsyncGenerator
 from openai import OpenAI
 from .models import ChatMessage, ChatSession
-from .function_tools import get_function_tools, execute_function_call, execute_function_call_stream
+from .function_tools import get_function_tools, execute_function_call_stream
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +137,7 @@ When responding to journal processing requests, structure your response in two p
 1. After showing OCR results, FIRST ask: "Would you like to upload any tasks to Todoist?"
 2. ONLY if user responds yes to Todoist upload, THEN check if there are low_confidence_items
 3. If there are low-confidence items, ask: "Would you like to review low-confidence items (in italics) prior to upload?"
-   - If user says yes, use start_low_confidence_review function to begin the review process
+   - If user says yes, use start_review_from_session function to begin the review process
    - If user says no, proceed directly with the Todoist upload using the original data  
 4. If there are no low-confidence items, proceed directly with the upload
 
@@ -214,51 +214,8 @@ This creates a better user experience by separating the factual results from int
             
             logger.info(f"Executing function: {function_name} with args: {function_args}")
             
-            # Execute the function
-            function_result = await execute_function_call(session, function_name, function_args)
-            
-            # Add function call and result to conversation context
-            messages.append({
-                "role": "assistant",
-                "content": None,
-                "function_call": {
-                    "name": function_name,
-                    "arguments": function_call.arguments
-                }
-            })
-            
-            messages.append({
-                "role": "function",
-                "name": function_name,
-                "content": json.dumps(function_result)
-            })
-            
-            # Get AI response based on function result
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=0.1,
-                max_tokens=1000
-            )
-            
-            ai_response = response.choices[0].message.content or "Function completed successfully."
-            
-            # Check for special prefill handling (same as streaming version)
-            if (function_name == "start_low_confidence_review" or function_name == "start_review_from_session") and function_result.get("start_prefill_editing"):
-                # This should trigger prefill but non-streaming doesn't support it
-                # Return instructions for user to try again with streaming
-                return "Please refresh and try the review again - this requires real-time interaction."
-                
-            elif function_name == "process_edited_item" and function_result.get("next_prefill_item"):
-                # Non-streaming can't handle prefill continuation
-                return "Please refresh and try the review again - this requires real-time interaction."
-            
-            # If the function result includes progress updates, format them nicely
-            if isinstance(function_result, dict) and "progress" in function_result:
-                progress_text = "\n".join(function_result["progress"])
-                ai_response = f"**Processing Steps:**\n{progress_text}\n\n{ai_response}"
-            
-            return ai_response
+            # Non-streaming function calls are deprecated - redirect to streaming
+            return "This operation requires streaming support. Please try again or refresh the page to enable real-time processing."
             
         except Exception as e:
             logger.error(f"Error handling function call: {str(e)}")
@@ -415,9 +372,9 @@ This creates a better user experience by separating the factual results from int
                 else:
                     yield progress_data
             
-            # If no function result from streaming, get it from the regular function call
+            # If no function result from streaming, create a default success result
             if function_result is None:
-                function_result = await execute_function_call(session, function_name, function_args)
+                function_result = {"success": True, "message": "Function completed successfully."}
             
             # Add function call and result to conversation context
             messages.append({

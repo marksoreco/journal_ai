@@ -72,8 +72,9 @@ class OCRFormatter:
     def detect_low_confidence_items(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Detect all low-confidence items across all sections for task-related content"""
         low_confidence_items = []
+        logger.info(f"Detecting low-confidence items. Available sections: {list(data.keys())}")
         
-        def check_item(item, section_name, field_name='task'):
+        def check_item(item, section_name, field_name='task', item_index=None):
             """Helper to check if an item has low confidence"""
             if isinstance(item, dict):
                 text = item.get(field_name) or item.get('item') or item.get('value')
@@ -84,77 +85,29 @@ class OCRFormatter:
                         'text': text,
                         'confidence': confidence,
                         'section': section_name,
+                        'field_name': field_name,
+                        'item_index': item_index,
                         'original_item': item
                     })
         
-        # Check all task-related sections
+        # Only check sections that get uploaded to Todoist
+        # Based on todoist_client.py - only prepare_priority and to_do sections are uploaded
+        
         if data.get('prepare_priority'):
-            for item in data['prepare_priority']:
-                check_item(item, 'Priority Tasks', 'task')
+            logger.info(f"Checking {len(data['prepare_priority'])} prepare_priority items")
+            for index, item in enumerate(data['prepare_priority']):
+                check_item(item, 'prepare_priority', 'task', index)
         
         if data.get('to_do'):
-            for item in data['to_do']:
-                check_item(item, 'To-Do Items', 'item')
+            logger.info(f"Checking {len(data['to_do'])} to_do items")
+            for index, item in enumerate(data['to_do']):
+                logger.info(f"to_do[{index}] item structure: {item}")
+                # Try both 'task' and 'item' field names for to_do items
+                check_item(item, 'to_do', 'task', index)  # Try 'task' first
+                if not any(lc['section'] == 'to_do' and lc['item_index'] == index for lc in low_confidence_items):
+                    check_item(item, 'to_do', 'item', index)  # Fallback to 'item'
         
-        # Check other actionable sections from daily pages
-        if data.get('i_am_grateful_for'):
-            for item in data['i_am_grateful_for']:
-                check_item(item, 'Grateful For', 'item')
-        
-        if data.get('i_am_looking_forward_to'):
-            for item in data['i_am_looking_forward_to']:
-                check_item(item, 'Looking Forward To', 'item')
-        
-        if data.get('ways_i_can_give'):
-            for item in data['ways_i_can_give']:
-                check_item(item, 'Ways I Can Give', 'item')
-        
-        # Check reflection sections that might contain actionable content
-        if data.get('reflect'):
-            reflect_data = data['reflect']
-            if reflect_data.get('highlights'):
-                for item in reflect_data['highlights']:
-                    check_item(item, 'Highlights', 'value')
-            
-            if reflect_data.get('i_was_at_my_best_when'):
-                check_item(reflect_data['i_was_at_my_best_when'], 'At My Best When', 'value')
-            
-            if reflect_data.get('i_felt_unrest_when'):
-                check_item(reflect_data['i_felt_unrest_when'], 'Felt Unrest When', 'value')
-            
-            if reflect_data.get('one_way_i_can_improve_tomorrow'):
-                check_item(reflect_data['one_way_i_can_improve_tomorrow'], 'Tomorrow\'s Improvement', 'value')
-        
-        # Check theme and habit (these might be actionable)
-        if data.get('habit'):
-            check_item(data['habit'], 'Habit', 'value')
-            
-        if data.get('theme'):
-            check_item(data['theme'], 'Theme', 'value')
-        
-        # For weekly pages, check additional sections
-        if data.get('personal_growth'):
-            check_item(data['personal_growth'], 'Personal Growth', 'value')
-            
-        if data.get('relationships_growth'):
-            check_item(data['relationships_growth'], 'Relationship Growth', 'value')
-        
-        # Check weekly reflection sections
-        if data.get('reflect') and 'biggest_accomplishments' in data['reflect']:
-            for item in data['reflect']['biggest_accomplishments']:
-                check_item(item, 'Biggest Accomplishments', 'value')
-        
-        if data.get('reflect') and 'habits_insights' in data['reflect']:
-            check_item(data['reflect']['habits_insights'], 'Habits Insights', 'value')
-        
-        if data.get('reflect') and 'meaningful_moments' in data['reflect']:
-            check_item(data['reflect']['meaningful_moments'], 'Meaningful Moments', 'value')
-        
-        if data.get('reflect') and 'god_is_teaching_me' in data['reflect']:
-            check_item(data['reflect']['god_is_teaching_me'], 'God is Teaching Me', 'value')
-        
-        if data.get('reflect') and 'one_change_next_week' in data['reflect']:
-            check_item(data['reflect']['one_change_next_week'], 'One Change Next Week', 'value')
+        logger.info(f"Found {len(low_confidence_items)} low-confidence items total")
         
         return low_confidence_items
     

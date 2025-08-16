@@ -161,6 +161,11 @@ async def upload_file(
             session.uploaded_files[file_id] = file_info
             uploaded_files.append(file_info)
             
+            # Clear any old processing state when new files are uploaded
+            if 'pending_review' in session.processing_states:
+                del session.processing_states['pending_review']
+                logger.info("Cleared old pending_review state for new file upload")
+            
             logger.info(f"File uploaded successfully: {file.filename} -> {file_id}")
         
         result = {
