@@ -111,61 +111,108 @@ class ChatService:
         """Build conversation context from session history"""
         
         # Build system message with session context
-        system_content = """You are Journal AI, an assistant that helps users process journal pages, manage tasks, and access their data.
+        # Check current agent from session
+        current_agent = session.processing_states.get("current_agent", "router")
+        
+        # Disable routing during active review sessions
+        review_state = session.get_low_confidence_review_state()
+        if review_state and review_state.get('active'):
+            current_agent = "journal"  # Force journal agent during review
+        
+        if current_agent == "router":
+            system_content = """You are a Router Agent for Journal AI. Your job is to understand what the user wants to do and route them to the appropriate specialized agent.
 
-You have access to several functions:
+You have access to one function:
+- route_user_intent: Analyze user message and route to journal, gmail, search, or general conversation
+
+**ROUTING LOGIC:**
+- "journal" agent: Processing journal pages, OCR, tasks, Todoist uploads, uploading images
+- "gmail" agent: Email downloads, Gmail API, email management, email processing  
+- "search" agent: Searching data, RAG queries, information retrieval
+- "general": Greetings, help, simple questions (handle directly without routing)
+
+**WORKFLOW:**
+1. For general greetings/help, respond directly
+2. For specific tasks, use route_user_intent function to classify and route
+3. After routing, tell user "I'm connecting you to the [agent] specialist..."
+
+Be concise and focus on understanding user intent to route correctly."""
+            
+        elif current_agent == "journal":
+            system_content = """You are the Journal Processing Agent. You specialize in journal page processing, OCR, task management, and database storage.
+
+You have access to these functions:
 - process_journal_image: Process uploaded journal page images with OCR
-- upload_to_todoist: Upload tasks to Todoist with confidence review
-- fetch_gmail_data: Fetch and store Gmail data in vector database
-- detect_page_type: Detect the type of journal page
+- upload_journal_to_pinecone: Upload processed journal OCR data to vector database for future search
+- upload_to_todoist: Upload tasks to Todoist (ONLY use after successful Pinecone storage)
 - start_review_from_session: Initialize review using low-confidence items from recent journal processing
 - process_edited_item: Process user's edited or accepted item text from prefill editing
 
-Be helpful, conversational, and guide users through these workflows. When they mention uploading images or files, offer to help process them. Ask clarifying questions when needed.
+Be helpful, conversational, and guide users through journal workflows. When they mention uploading images or files, offer to help process them.
 
 **IMPORTANT for Processing Requests:** When users respond with "Yes", "Y", "Sure", "Please", or similar affirmative responses after a file upload, interpret this as a request to process their journal page. When they respond with "No", "N", "Not now", or similar negative responses, acknowledge their choice and offer to help with other tasks.
 
-**IMPORTANT for OCR Results:** When you receive results from the process_journal_image function, the response will include a "formatted_content" field that contains pre-formatted content using the exact same logic as the classic UI. Simply present this formatted_content as-is without any additional formatting or modification. This ensures consistent formatting that matches the classic UI exactly.
+**IMPORTANT for OCR Results:** When you receive results from the process_journal_image function, the response will include:
+- "formatted_content" field: Pre-formatted content to present exactly as-is
+- "low_confidence_items" field: Array of items with low OCR confidence (these appear as italic *text* in formatted output)
+- "ocr_data" field: Raw JSON data for storage functions
 
-**IMPORTANT for Low-Confidence Items:** When you receive results from process_journal_image, check if there are any "low_confidence_items" in the response. These are items that were detected with low OCR confidence and appear as italics (*text*) in the formatted output. 
+Always check if low_confidence_items array exists and has items before deciding the next step.
 
-When responding to journal processing requests, structure your response in two parts:
-1. First, present the pre-formatted content from the "formatted_content" field exactly as provided
-2. Then, after a clear break (double line break), ask follow-up questions like "Would you like to upload any tasks to Todoist?" or suggest next steps
+**MANDATORY WORKFLOW SEQUENCE:**
+1. When user wants to process a journal page, FIRST call process_journal_image function with the file_id
+2. Present the formatted OCR results to the user
+3. Ask: "Store journal data in database?" (NOT "upload to Todoist")
+4. If user agrees to storage:
+   - Check the process_journal_image result for "low_confidence_items" array
+   - If low_confidence_items exist and array is not empty: Ask "Would you like to review the X low-confidence items (in italics) before storing in database?"
+     * If YES → start_review_from_session → after review complete → upload_journal_to_pinecone
+     * If NO → IMMEDIATELY call upload_journal_to_pinecone function (do NOT mention Todoist)
+   - If no low-confidence items or array is empty: IMMEDIATELY call upload_journal_to_pinecone
+5. ONLY after successful Pinecone storage → Ask about Todoist
 
-**IMPORTANT for Todoist Upload Flow:** 
-1. After showing OCR results, FIRST ask: "Would you like to upload any tasks to Todoist?"
-2. ONLY if user responds yes to Todoist upload, THEN check if there are low_confidence_items
-3. If there are low-confidence items, ask: "Would you like to review low-confidence items (in italics) prior to upload?"
-   - If user says yes, use start_review_from_session function to begin the review process
-   - If user says no, proceed directly with the Todoist upload using the original data  
-4. If there are no low-confidence items, proceed directly with the upload
-
-NEVER ask about reviewing low-confidence items unless the user has first confirmed they want to upload to Todoist.
+**CRITICAL FUNCTION CALLING RULES:**
+- When user says NO to reviewing low-confidence items → IMMEDIATELY call upload_journal_to_pinecone function with the original OCR data
+- When user declines low-confidence item review → DO NOT ask about Todoist, DO NOT mention Todoist, ONLY call upload_journal_to_pinecone
+- NEVER mention "Before we proceed with uploading to Todoist" - use "Before storing in database" instead
+- The upload_journal_to_pinecone function must be called with the ocr_data parameter from the most recent process_journal_image result
 
 **IMPORTANT for Low-Confidence Item Review Flow:**
-1. When user agrees to review, YOU MUST call the start_review_from_session function - DO NOT try to handle reviews manually
-2. This function automatically accesses the stored low-confidence items from recent journal processing
-3. The function will automatically handle the prefill editing flow
-4. When user responds with item text, call process_edited_item function with their message as item_text
-5. Continue until the function returns review_complete=true
-6. When review_complete=true, IMMEDIATELY proceed with Todoist upload using upload_to_todoist function
-7. NEVER manually ask "keep/edit/skip" - always use the function tools for reviews
+1. When user agrees to review, call start_review_from_session function
+2. When review_complete=true, IMMEDIATELY call upload_journal_to_pinecone function
+3. ONLY after successful storage, ask about Todoist
 
-**IMPORTANT for Prefill Messages:** When you need to prefill the user's input field with item text:
-- Send a message with type "prefill_edit" 
-- Include the item text to prefill and any context message
-- The frontend will auto-populate the user's input field for easy editing
+**IMPORTANT for Prefill Messages:** Use "prefill_edit" type messages for item editing.
 
-**IMPORTANT for Processing Prefilled Responses:** 
-- After sending a prefill_edit message, the VERY NEXT user message should be treated as their final item text
-- IMMEDIATELY call process_edited_item function with their complete message as the item_text
-- Do NOT ask questions or make conversation - just process their response with the function
-- The function will handle moving to the next item or completing the review
-- NEVER respond conversationally during prefill editing - always use the function
+**IMPORTANT for Processing Prefilled Responses:** Immediately call process_edited_item function with user's complete message.
 
-This creates a better user experience by separating the factual results from interactive questions and allowing users to review uncertain OCR results before uploading to Todoist."""
-        
+**LANGUAGE RULES:**
+- Use "database" not "Todoist" when asking about storage
+- Use "storing in database" not "uploading to Todoist"  
+- Only mention Todoist AFTER successful database storage"""
+            
+        elif current_agent == "gmail":
+            system_content = """You are the Gmail Management Agent. You specialize in downloading emails from Gmail and storing them in the vector database for future search and analysis.
+
+You have access to these functions:
+- fetch_gmail_data: Download Gmail emails since a specified date and upload to Pinecone vector database
+
+Be helpful and guide users through Gmail data management workflows. Ask for clarification when needed about date ranges and email limits.
+
+**WORKFLOW:**
+1. Ask user for the date range (since when to fetch emails)
+2. Optionally ask for email limit (default: 50, min: 10, max: 500) 
+3. Use fetch_gmail_data function to download and process emails
+4. Confirm completion and explain what data was stored
+
+**DATE FORMAT:** Always use YYYY-MM-DD format (e.g., '2024-01-01')
+**EMAIL LIMITS:** Suggest reasonable limits (10-100 for testing, up to 500 for full downloads)
+**USER GUIDANCE:** Explain that emails will be cleaned, processed, and stored in vector database for future RAG queries"""
+            
+        else:
+            # Fallback for other agents or unknown states  
+            system_content = """You are Journal AI. I'm currently routing your request to the appropriate specialist. Please wait a moment."""
+            
         # Add information about uploaded files
         if session.uploaded_files:
             file_list = []
@@ -179,7 +226,7 @@ This creates a better user experience by separating the factual results from int
         pending_review = session.processing_states.get('pending_review')
         if pending_review and pending_review.get('has_items'):
             low_confidence_count = len(pending_review.get('low_confidence_items', []))
-            system_content += f"\n\n**CURRENT SESSION STATUS**: There are {low_confidence_count} low-confidence items from recent journal processing that can be reviewed before Todoist upload. When user requests Todoist upload, ask if they want to review these items first."
+            system_content += f"\n\n**CURRENT SESSION STATUS**: There are {low_confidence_count} low-confidence items from recent journal processing that should be reviewed before database storage. When user agrees to store data, ask if they want to review these items first."
         
         # Add information about active low-confidence review session
         review_state = session.get_low_confidence_review_state()
@@ -228,6 +275,93 @@ This creates a better user experience by separating the factual results from int
             function_args = json.loads(function_call.arguments)
             
             logger.info(f"Executing function: {function_name} with args: {function_args}")
+            
+            # Handle routing function specially
+            if function_name == "route_user_intent":
+                async for progress_data in execute_function_call_stream(session, function_name, function_args):
+                    if progress_data.get("type") == "function_result":
+                        result_data = progress_data.get("data", {})
+                        intent = result_data.get("intent", "general")
+                        
+                        # Update session agent state
+                        if intent != "general":
+                            session.processing_states["current_agent"] = intent
+                            
+                            # Send routing confirmation
+                            routing_message = ChatMessage(
+                                type="assistant",
+                                content=f"I'm connecting you to the {intent} specialist..."
+                            )
+                            session.add_message(routing_message)
+                            
+                            yield {
+                                "type": "response",
+                                "content": f"I'm connecting you to the {intent} specialist...",
+                                "session_id": session.session_id,
+                                "message_id": routing_message.id
+                            }
+                            
+                            # Now re-process the original message with the specialized agent
+                            # Get the original user message from the conversation
+                            user_message = function_args.get("user_message", "")
+                            if user_message:
+                                # Build new context with the specialized agent
+                                specialized_messages = self._build_conversation_context(session)
+                                specialized_messages.append({"role": "user", "content": user_message})
+                                
+                                # Get response from specialized agent
+                                response = self.client.chat.completions.create(
+                                    model=self.model,
+                                    messages=specialized_messages,
+                                    functions=self.function_tools,
+                                    function_call="auto",
+                                    temperature=0.1,
+                                    max_tokens=1000
+                                )
+                                
+                                choice = response.choices[0]
+                                message = choice.message
+                                
+                                # Handle specialized agent response
+                                if hasattr(message, 'function_call') and message.function_call:
+                                    # Specialized agent wants to call a function
+                                    async for progress_data in self._handle_function_call_stream(session, message.function_call, specialized_messages):
+                                        yield progress_data
+                                else:
+                                    # Direct response from specialized agent
+                                    specialist_response = message.content or "How can I help you?"
+                                    specialist_message = ChatMessage(
+                                        type="assistant",
+                                        content=specialist_response
+                                    )
+                                    session.add_message(specialist_message)
+                                    
+                                    yield {
+                                        "type": "response",
+                                        "content": specialist_response,
+                                        "session_id": session.session_id,
+                                        "message_id": specialist_message.id
+                                    }
+                            return
+                        else:
+                            # Handle general conversation directly
+                            general_response = "Hello! I can help you with journal processing, Gmail management, or searching your data. What would you like to do?"
+                            general_message = ChatMessage(
+                                type="assistant", 
+                                content=general_response
+                            )
+                            session.add_message(general_message)
+                            
+                            yield {
+                                "type": "response",
+                                "content": general_response,
+                                "session_id": session.session_id,
+                                "message_id": general_message.id
+                            }
+                            return
+                    else:
+                        yield progress_data
+                return
             
             # For prefill functions, collect the result data from streaming
             function_result = None

@@ -278,24 +278,8 @@
             typingIndicator.style.display = 'flex';
 
             try {
-                // Use streaming if the message might trigger function calling
-                const lowerMessage = message.toLowerCase().trim();
-                const shouldStream = lowerMessage.includes('process') || 
-                                   lowerMessage.includes('upload') || 
-                                   lowerMessage.includes('todoist') ||
-                                   lowerMessage.includes('gmail') ||
-                                   lowerMessage.includes('fetch') ||
-                                   lowerMessage === 'yes' || 
-                                   lowerMessage === 'y' || 
-                                   lowerMessage === 'sure' || 
-                                   lowerMessage === 'please' ||
-                                   lowerMessage === 'ok' ||
-                                   lowerMessage === 'okay' ||
-                                   lowerMessage.startsWith('yes,') ||
-                                   lowerMessage.startsWith('sure,') ||
-                                   lowerMessage.startsWith('please') ||
-                                   // Always use streaming during active review sessions
-                                   (typeof window.activeReviewSession !== 'undefined' && window.activeReviewSession === true);
+                // Always use streaming since we have router agent
+                const shouldStream = true;
 
                 if (shouldStream) {
                     try {
