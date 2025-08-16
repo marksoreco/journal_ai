@@ -2,7 +2,7 @@ name: Deploy to Cloud Run
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "git-deploy-to-gcr" ]
   workflow_dispatch:
 
 env:
