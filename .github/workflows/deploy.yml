@@ -59,22 +59,6 @@ jobs:
             --set-env-vars PINECONE_API_KEY=${{ secrets.PINECONE_API_KEY }} \
             --set-env-vars GOOGLE_CREDENTIALS_JSON=${{ secrets.GOOGLE_CREDENTIALS_JSON_B64 }}
 
-      - name: Wait for Cloud Run service to be Ready
-        run: |
-          set -Eeuo pipefail
-          for i in {1..40}; do
-            READY=$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" \
-              --format='value(status.latestReadyRevisionName)')
-            CREATED=$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" \
-              --format='value(status.latestCreatedRevisionName)')
-            echo "Ready: $READY | Created: $CREATED"
-            if [ -n "$READY" ] && [ "$READY" = "$CREATED" ]; then
-              echo "Service is Ready."
-              break
-            fi
-            sleep 5
-          done
-
       - name: Fetch service URL
         id: svc
         run: |
@@ -86,7 +70,10 @@ jobs:
         run: |
           gcloud run services update $SERVICE_NAME \
             --region $REGION \
-            --set-env-vars GOOGLE_REDIRECT_URI=${{ steps.svc.outputs.url }}/auth/google/callback
+            --set-env-vars GOOGLE_REDIRECT_URI=${{ steps.svc.outputs.url }}/auth/google/callback \
+            --set-env-vars OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
+            --set-env-vars PINECONE_API_KEY=${{ secrets.PINECONE_API_KEY }} \
+            --set-env-vars GOOGLE_CREDENTIALS_JSON=${{ secrets.GOOGLE_CREDENTIALS_JSON_B64 }}
 
       - name: Output final URL
         run: echo "Deployed to ${{ steps.svc.outputs.url }}"
