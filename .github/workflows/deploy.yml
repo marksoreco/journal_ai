@@ -60,22 +60,5 @@ jobs:
             --set-env-vars GOOGLE_CREDENTIALS_JSON=${{ secrets.GOOGLE_CREDENTIALS_JSON_B64 }} \
             --set-env-vars GOOGLE_CREDENTIALS_PATH=/tmp/google_client.json
 
-      - name: Fetch service URL
-        id: svc
-        run: |
-          URL=$(gcloud run services describe $SERVICE_NAME --region $REGION --format 'value(status.url)')
-          echo "url=$URL" >> $GITHUB_OUTPUT
-          echo "Service URL: $URL"
-
-      - name: Update envs with GOOGLE_REDIRECT_URI (2nd pass)
-        run: |
-          gcloud run services update $SERVICE_NAME \
-            --region $REGION \
-            --set-env-vars GOOGLE_REDIRECT_URI=${{ steps.svc.outputs.url }}/auth/google/callback \
-            --set-env-vars OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
-            --set-env-vars PINECONE_API_KEY=${{ secrets.PINECONE_API_KEY }} \
-            --set-env-vars GOOGLE_CREDENTIALS_JSON=${{ secrets.GOOGLE_CREDENTIALS_JSON_B64 }} \
-            --set-env-vars GOOGLE_CREDENTIALS_PATH=/tmp/google_client.json
-
       - name: Output final URL
         run: echo "Deployed to ${{ steps.svc.outputs.url }}"
