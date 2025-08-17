@@ -59,7 +59,5 @@ jobs:
             --set-env-vars PINECONE_API_KEY=${{ secrets.PINECONE_API_KEY }} \
             --set-env-vars GOOGLE_CREDENTIALS_JSON=${{ secrets.GOOGLE_CREDENTIALS_JSON_B64 }} \
             --set-env-vars GOOGLE_CREDENTIALS_PATH=/tmp/google_client.json \
-            --set-env-vars SESSION_SECRET_KEY=${{ secrets.SESSION_SECRET_KEY }}
-
-      - name: Output final URL
-        run: echo "Deployed to ${{ steps.svc.outputs.url }}"
+            --set-env-vars SESSION_SECRET_KEY=${{ secrets.SESSION_SECRET_KEY }} \
+            --set-env-vars TODOIST_API_TOKEN=${{ secrets.TODOIST_API_TOKEN }}
