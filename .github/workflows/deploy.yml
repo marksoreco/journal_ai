@@ -59,6 +59,22 @@ jobs:
             --set-env-vars PINECONE_API_KEY=${{ secrets.PINECONE_API_KEY }} \
             --set-env-vars GOOGLE_CREDENTIALS_JSON=${{ secrets.GOOGLE_CREDENTIALS_JSON_B64 }}
 
+      - name: Wait for Cloud Run service to be Ready
+        run: |
+          set -Eeuo pipefail
+          for i in {1..40}; do
+            READY=$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" \
+              --format='value(status.latestReadyRevisionName)')
+            CREATED=$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" \
+              --format='value(status.latestCreatedRevisionName)')
+            echo "Ready: $READY | Created: $CREATED"
+            if [ -n "$READY" ] && [ "$READY" = "$CREATED" ]; then
+              echo "Service is Ready."
+              break
+            fi
+            sleep 5
+          done
+
       - name: Fetch service URL
         id: svc
         run: |

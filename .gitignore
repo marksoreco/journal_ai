@@ -13,6 +13,7 @@ src/gmail/token.pkl
 src/gmail/downloads/gmail_since_*.json
 src/gmail/logout.lock
 src/gmail/state.txt
+src/gmail/credentials_b64.txt
 
 src/todoist/test_cache.pkl
 src/todoist/cache/
