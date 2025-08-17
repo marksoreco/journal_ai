@@ -37,7 +37,7 @@ PINECONE_SPARSE_INDEX=email-sparse-index
 
 # Gmail OAuth Configuration  
 GOOGLE_REDIRECT_URI=http://localhost:8000/auth/google/callback
-GOOGLE_CREDENTIALS_PATH=src/gmail/credentials.json
+GOOGLE_CREDENTIALS_PATH=src/gmail/google_client.json
 
 # Optional: Milvus Configuration (for future use)
 MILVUS_USERNAME=your-username
@@ -47,7 +47,7 @@ MILVUS_URI=your-milvus-uri
 
 3. **Set up Gmail API credentials:**
    - Create a Google Cloud project and enable Gmail API
-   - Download credentials and place as `src/gmail/credentials.json`
+   - Download credentials and place as `src/gmail/google_client.json`
 
 4. **Run the application:**
 
@@ -85,7 +85,7 @@ journal_ai/
 │   ├── gmail/              # Gmail API integration
 │   │   ├── auth.py         # Gmail authentication
 │   │   ├── client.py       # Gmail API client
-│   │   ├── credentials.json # OAuth credentials (not in git)
+│   │   ├── google_client.json # OAuth credentials (not in git)
 │   │   ├── downloads/      # Downloaded email data
 │   │   └── token.pkl       # OAuth token (not in git)
 │   ├── ocr/                # Intelligent OCR processing system
@@ -307,7 +307,7 @@ python -m pytest test/test_monthly_date_parsing.py -v
 
 ### Common Issues
 1. **Import Errors**: Ensure virtual environment is activated and dependencies installed
-2. **OAuth Failures**: Check `credentials.json` path and redirect URI configuration
+2. **OAuth Failures**: Check `google_client.json` path and redirect URI configuration
 3. **API Errors**: Verify API keys in `.env` file
 4. **Chat Issues**: Clear browser cache and check browser console for errors
 5. **Session Problems**: Use "Clear Session" button or delete session via API

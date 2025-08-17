@@ -3,8 +3,10 @@ import json
 from fastapi import FastAPI, Depends
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 import os
+import pathlib
+import base64
 from dotenv import load_dotenv
 from .auth_routes import router as auth_router
 from .chat.routes import router as chat_router
@@ -13,6 +15,7 @@ from .gmail.client import GmailClient
 from datetime import datetime
 from pydantic import BaseModel
 from .rag.email_vectorizer import EmailVectorizer
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
@@ -25,7 +28,34 @@ from .logging_config import setup_logging
 from .config import LOG_LEVEL, LOG_FILE
 setup_logging(level=LOG_LEVEL, log_file=LOG_FILE)
 
+# Set up Google credentials handling for cloud deployment
+def _write_google_credentials_from_env():
+    creds = os.getenv("GOOGLE_CREDENTIALS_JSON")
+    if not creds:
+        return  # local dev can still use a file at GOOGLE_CREDENTIALS_PATH
+
+    # ✅ write to /tmp by default on Cloud Run
+    target = pathlib.Path(os.getenv("GOOGLE_CREDENTIALS_PATH", "/tmp/google_client.json"))
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        text = creds.strip()
+        if not text:
+            return
+        if not text.lstrip().startswith("{"):
+            text = base64.b64decode(text).decode("utf-8")
+        json.loads(text)  # validate
+        target.write_text(text)
+        logging.getLogger(__name__).info("Wrote Google OAuth credentials to %s", target)
+    except Exception as e:
+        logging.getLogger(__name__).exception("Failed to materialize GOOGLE_CREDENTIALS_JSON: %s", e)
+
+_write_google_credentials_from_env()
+
 app = FastAPI()
+
+# add once at app startup so Cloud Run headers are trusted
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 # Mount static files (only chat-related)
 static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")

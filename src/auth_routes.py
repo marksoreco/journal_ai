@@ -2,12 +2,14 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 import pickle
 import os
 import time
+import pathlib
 from dotenv import load_dotenv
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
+from google_auth_oauthlib.flow import Flow
 from fastapi.responses import RedirectResponse, JSONResponse
 import logging
 from fastapi import APIRouter
-from .gmail.auth import OAUTH_SCOPES
+from .gmail.auth import _compute_redirect_uri, OAUTH_SCOPES
 
 logger = logging.getLogger(__name__)
 
@@ -28,46 +30,40 @@ logger.info(f"OAuth Redirect URI: {OAUTH_REDIRECT_URI}")
 logger.info(f"Google Credentials Path: {GOOGLE_CREDENTIALS_PATH}")
 
 @router.get("/auth/google")
-async def auth_google(t: str = None, redirect_to: str = "/ui"):
+async def auth_google(request: Request, t: str | None = None, redirect_to: str = "/ui"):
     try:
-        logger.info(f"OAuth initiation requested. Timestamp: {t}")
-        
-        # Force clear any existing tokens to ensure fresh flow
-        token_path = os.path.join(os.path.dirname(__file__), "gmail", "token.pkl")
-        if os.path.exists(token_path):
-            os.remove(token_path)
-            logger.info("Removed existing token file for fresh OAuth flow")
-        
-        # Use credentials path from env or fallback to default
-        credentials_file = GOOGLE_CREDENTIALS_PATH or os.path.join(os.path.dirname(__file__), 'gmail', 'credentials.json')
-        flow = InstalledAppFlow.from_client_secrets_file(
+        logger.info("OAuth initiation requested. Timestamp: %s", t)
+
+        # read the file your shim wrote
+        credentials_file = os.getenv("GOOGLE_CREDENTIALS_PATH", "/tmp/google_client.json")
+        redirect_uri = _compute_redirect_uri(request)
+
+        flow = Flow.from_client_secrets_file(
             credentials_file,
             scopes=OAUTH_SCOPES,
-            redirect_uri=OAUTH_REDIRECT_URI
+            redirect_uri=redirect_uri,
         )
+
         auth_url, state = flow.authorization_url(
-            access_type='offline',
-            include_granted_scopes='true',
-            prompt='consent'  # Force consent screen to appear
+            access_type="offline",
+            include_granted_scopes="true",
+            prompt="consent",
         )
-        # Store state and redirect_to in session or DB for verification (simplified here)
-        state_file = os.path.join(os.path.dirname(__file__), "gmail", "state.txt")
-        redirect_file = os.path.join(os.path.dirname(__file__), "gmail", "redirect.txt")
-        with open(state_file, 'w') as f:
-            f.write(state)
-        with open(redirect_file, 'w') as f:
-            f.write(redirect_to)
-        logger.info(f"OAuth flow initiated. Redirecting to: {auth_url}")
+
+        tmp_dir = pathlib.Path("/tmp/gmail"); tmp_dir.mkdir(parents=True, exist_ok=True)
+        (tmp_dir / "state.txt").write_text(state)
+        (tmp_dir / "redirect.txt").write_text(redirect_to)
+
         return RedirectResponse(url=auth_url)
     except Exception as e:
-        logger.error(f"Error initiating OAuth: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to start OAuth flow")
+        logger.exception("Error initiating OAuth")
+        raise HTTPException(status_code=500, detail=f"Failed to start OAuth flow: {e}")
 
 @router.get("/auth/google/callback")
 async def auth_google_callback(code: str, state: str):
     try:
         # Verify state (prevent CSRF; simplified here)
-        state_file = os.path.join(os.path.dirname(__file__), "gmail", "state.txt")
+        state_file = "/tmp/gmail/state.txt"
         with open(state_file, 'r') as f:
             saved_state = f.read()
         if state != saved_state:
@@ -94,7 +90,7 @@ async def auth_google_callback(code: str, state: str):
             logger.info("Removed logout lock file after successful login")
         
         # Get redirect URL
-        redirect_file = os.path.join(os.path.dirname(__file__), "gmail", "redirect.txt")
+        redirect_file = "/tmp/gmail/redirect.txt"
         redirect_url = '/ui'  # Default
         if os.path.exists(redirect_file):
             with open(redirect_file, 'r') as f:
@@ -102,7 +98,7 @@ async def auth_google_callback(code: str, state: str):
             os.remove(redirect_file)
         
         # Clean up state
-        state_file = os.path.join(os.path.dirname(__file__), "gmail", "state.txt")
+        state_file = "/tmp/gmail/state.txt"
         if os.path.exists(state_file):
             os.remove(state_file)
         

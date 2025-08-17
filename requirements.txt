@@ -17,6 +17,7 @@ google-api-python-client
 # Google Auth
 google-auth-oauthlib
 google-auth-httplib2
+starlette
 
 # RAG Dependencies
 numpy
