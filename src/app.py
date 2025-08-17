@@ -8,6 +8,8 @@ import os
 import pathlib
 import base64
 from dotenv import load_dotenv
+from starlette.middleware.sessions import SessionMiddleware
+
 from .auth_routes import router as auth_router
 from .chat.routes import router as chat_router
 from .gmail.auth import get_gmail_service
@@ -54,7 +56,16 @@ _write_google_credentials_from_env()
 
 app = FastAPI()
 
-# add once at app startup so Cloud Run headers are trusted
+# Add session middleware for OAuth state management
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv("SESSION_SECRET_KEY"),
+    session_cookie="journal_ai_session",
+    max_age=3600,  # 1 hour
+    same_site="lax"
+)
+
+# Add proxy headers middleware to trust Cloud Run headers
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 # Mount static files (only chat-related)

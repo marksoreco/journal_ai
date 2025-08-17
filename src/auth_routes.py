@@ -50,9 +50,17 @@ async def auth_google(request: Request, t: str | None = None, redirect_to: str =
             prompt="consent",
         )
 
-        tmp_dir = pathlib.Path("/tmp/gmail"); tmp_dir.mkdir(parents=True, exist_ok=True)
-        (tmp_dir / "state.txt").write_text(state)
-        (tmp_dir / "redirect.txt").write_text(redirect_to)
+        logger.info(f"Generated state: '{state}'")
+        logger.info(f"Generated auth URL: {auth_url}")
+
+        # Store OAuth state in session instead of files
+        request.session["oauth_state"] = state
+        request.session["oauth_redirect"] = redirect_to
+        request.session["oauth_timestamp"] = time.time()
+        
+        logger.info(f"Stored OAuth state in session: {state}")
+        logger.info(f"Stored redirect in session: {redirect_to}")
+        logger.info(f"Session data after storing: {dict(request.session)}")
 
         return RedirectResponse(url=auth_url)
     except Exception as e:
@@ -62,22 +70,50 @@ async def auth_google(request: Request, t: str | None = None, redirect_to: str =
 @router.get("/auth/google/callback")
 async def auth_google_callback(code: str, state: str, request: Request):
     try:
-        # Verify state (prevent CSRF; simplified here)
-        state_file = "/tmp/gmail/state.txt"
-        with open(state_file, 'r') as f:
-            saved_state = f.read()
+        logger.info("=== OAuth Callback Started ===")
+        logger.info(f"Received code: {code[:20]}...")
+        logger.info(f"Received state: '{state}'")
+        logger.info(f"Session data: {dict(request.session)}")
+        
+        # Verify state from session (prevent CSRF)
+        saved_state = request.session.get("oauth_state")
+        saved_redirect = request.session.get("oauth_redirect", "/ui")
+        oauth_timestamp = request.session.get("oauth_timestamp", 0)
+        
+        logger.info(f"Saved state: '{saved_state}'")
+        logger.info(f"Saved redirect: '{saved_redirect}'")
+        logger.info(f"OAuth timestamp: {oauth_timestamp}")
+        
+        # Check if session has expired (1 hour)
+        if time.time() - oauth_timestamp > 3600:
+            logger.error("OAuth session expired")
+            raise HTTPException(status_code=400, detail="OAuth session expired")
+        
+        if not saved_state:
+            logger.error("No OAuth state found in session")
+            raise HTTPException(status_code=400, detail="No OAuth state found")
+        
         if state != saved_state:
+            logger.error(f"State mismatch - received: '{state}', saved: '{saved_state}'")
             raise HTTPException(status_code=400, detail="Invalid state parameter")
         
         # Exchange code for tokens - use same redirect URI computation as initiation
         redirect_uri = _compute_redirect_uri(request)
-        flow = InstalledAppFlow.from_client_secrets_file(
-            GOOGLE_CREDENTIALS_PATH,
-            scopes=OAUTH_SCOPES,
-            redirect_uri=redirect_uri
-        )
-        flow.fetch_token(code=code)
-        creds = flow.credentials
+        logger.info(f"Using redirect URI: {redirect_uri}")
+        logger.info(f"Using scopes: {OAUTH_SCOPES}")
+        
+        try:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                GOOGLE_CREDENTIALS_PATH,
+                scopes=OAUTH_SCOPES,
+                redirect_uri=redirect_uri
+            )
+            flow.fetch_token(code=code)
+            creds = flow.credentials
+            logger.info("Successfully fetched tokens")
+        except Exception as token_error:
+            logger.error(f"Error fetching tokens: {str(token_error)}")
+            raise HTTPException(status_code=500, detail=f"Token exchange failed: {str(token_error)}")
         
         # Save credentials
         token_path = os.path.join(os.path.dirname(__file__), "gmail", "token.pkl")
@@ -90,29 +126,25 @@ async def auth_google_callback(code: str, state: str, request: Request):
             os.remove(lock_file)
             logger.info("Removed logout lock file after successful login")
         
-        # Get redirect URL
-        redirect_file = "/tmp/gmail/redirect.txt"
-        redirect_url = '/ui'  # Default
-        if os.path.exists(redirect_file):
-            with open(redirect_file, 'r') as f:
-                redirect_url = f.read().strip()
-            os.remove(redirect_file)
+        # Clear OAuth session data
+        request.session.pop("oauth_state", None)
+        request.session.pop("oauth_redirect", None)
+        request.session.pop("oauth_timestamp", None)
         
-        # Clean up state
-        state_file = "/tmp/gmail/state.txt"
-        if os.path.exists(state_file):
-            os.remove(state_file)
+        # Set authentication status in session
+        request.session["authenticated"] = True
+        request.session["auth_timestamp"] = time.time()
         
         # Redirect to the appropriate UI after successful authentication
-        logger.info(f"Redirecting after successful authentication to: {redirect_url}")
-        return RedirectResponse(url=redirect_url)
+        logger.info(f"Redirecting after successful authentication to: {saved_redirect}")
+        return RedirectResponse(url=saved_redirect)
     except Exception as e:
         logger.error(f"Error in OAuth callback: {str(e)}")
         raise HTTPException(status_code=500, detail="OAuth callback failed")
 
 @router.post("/auth/logout")
-async def logout():
-    """Logout user by clearing stored credentials"""
+async def logout(request: Request):
+    """Logout user by clearing stored credentials and session"""
     try:
         token_path = os.path.join(os.path.dirname(__file__), "gmail", "token.pkl")
         logger.info(f"Logout requested. Looking for token file at: {token_path}")
@@ -141,6 +173,10 @@ async def logout():
         else:
             logger.info("Token file not found")
         
+        # Clear session data
+        request.session.clear()
+        logger.info("Session data cleared")
+        
         # Create a lock file to prevent token recreation during logout
         lock_file = os.path.join(os.path.dirname(__file__), "gmail", "logout.lock")
         try:
@@ -166,40 +202,31 @@ async def logout():
         except Exception as e:
             logger.error(f"Error creating lock file: {e}")
         
-        # Remove state.txt file
-        state_file = os.path.join(os.path.dirname(__file__), "gmail", "state.txt")
-        if os.path.exists(state_file):
-            try:
-                os.remove(state_file)
-                logger.info(f"State file removed successfully: {state_file}")
-            except Exception as e:
-                logger.error(f"Error removing state file: {e}")
-        else:
-            logger.info("State file not found")
-        
-        # Remove redirect.txt file
-        redirect_file = os.path.join(os.path.dirname(__file__), "gmail", "redirect.txt")
-        if os.path.exists(redirect_file):
-            try:
-                os.remove(redirect_file)
-                logger.info(f"Redirect file removed successfully: {redirect_file}")
-            except Exception as e:
-                logger.error(f"Error removing redirect file: {e}")
-        else:
-            logger.info("Redirect file not found")
-        
-        return JSONResponse({"status": "Logout successful", "message": "Credentials cleared"})
+        return JSONResponse({"status": "Logout successful", "message": "Credentials and session cleared"})
     except Exception as e:
         logger.error(f"Error during logout: {str(e)}")
         # Even if there's an error, return success to allow user to proceed
         return JSONResponse({"status": "Logout successful", "message": "Logout completed"})
 
 @router.get("/auth/status")
-async def auth_status():
+async def auth_status(request: Request):
     """Check if Gmail authentication is valid without requiring authentication"""
     try:
         token_path = os.path.join(os.path.dirname(__file__), "gmail", "token.pkl")
         logger.info(f"Auth status check requested. Looking for token at: {token_path}")
+        
+        # Check session authentication status
+        session_authenticated = request.session.get("authenticated", False)
+        auth_timestamp = request.session.get("auth_timestamp", 0)
+        
+        logger.info(f"Session authenticated: {session_authenticated}")
+        logger.info(f"Session auth timestamp: {auth_timestamp}")
+        
+        # Check if session has expired
+        if session_authenticated and (time.time() - auth_timestamp > SESSION_TIMEOUT):
+            logger.info("Session expired, clearing session data")
+            request.session.clear()
+            session_authenticated = False
         
         # Check if token file exists and is valid
         if os.path.exists(token_path):
@@ -211,6 +238,7 @@ async def auth_status():
             if token_age > SESSION_TIMEOUT:
                 logger.info(f"Token file is too old ({token_age:.0f} seconds, max: {SESSION_TIMEOUT}), removing it")
                 os.remove(token_path)
+                request.session.clear()
                 return {"authenticated": False, "message": f"Session expired - token file too old ({token_age:.0f}s > {SESSION_TIMEOUT}s)"}
             
             with open(token_path, 'rb') as token:
@@ -221,20 +249,28 @@ async def auth_status():
             # Check if credentials are valid
             if creds and creds.valid:
                 logger.info("Credentials are valid")
+                # Update session authentication status
+                request.session["authenticated"] = True
+                request.session["auth_timestamp"] = time.time()
                 return {"authenticated": True, "message": "Valid credentials found"}
             elif creds and creds.expired and creds.refresh_token:
                 # Don't refresh expired credentials during status check - just return not authenticated
                 logger.info("Credentials expired, not refreshing during status check")
                 # Remove expired token file
                 os.remove(token_path)
+                request.session.clear()
                 return {"authenticated": False, "message": "Credentials expired"}
             else:
                 logger.info("Credentials are invalid")
                 # Remove invalid token file
                 os.remove(token_path)
+                request.session.clear()
                 return {"authenticated": False, "message": "Invalid credentials"}
         else:
             logger.info(f"Token file not found at {token_path}")
+            # Clear session if no token file exists
+            if session_authenticated:
+                request.session.clear()
             return {"authenticated": False, "message": "No credentials found"}
     except Exception as e:
         logger.error(f"Error checking auth status: {str(e)}")
@@ -245,4 +281,5 @@ async def auth_status():
                 logger.info("Removed corrupted token file")
             except:
                 pass
+        request.session.clear()
         return {"authenticated": False, "message": f"Error: {str(e)}"}
