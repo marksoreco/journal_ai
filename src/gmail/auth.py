@@ -10,10 +10,7 @@ from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
 
-OAUTH_SCOPES = ["openid",
-                "https://www.googleapis.com/auth/userinfo.email",
-                "https://www.googleapis.com/auth/userinfo.profile",
-                'https://www.googleapis.com/auth/gmail.readonly']
+OAUTH_SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 
 def _compute_redirect_uri(request: Request, path="/auth/google/callback") -> str:
     if (fixed := os.getenv("GOOGLE_REDIRECT_URI")):  # optional manual override
