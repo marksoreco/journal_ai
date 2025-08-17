@@ -55,9 +55,7 @@ jobs:
             --port 8080 \
             --cpu 1 --memory 1Gi --concurrency 80 \
             --min-instances 0 --max-instances 2 \
-            --set-env-vars OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
-            --set-env-vars PINECONE_API_KEY=${{ secrets.PINECONE_API_KEY }} \
-            --set-env-vars GOOGLE_CREDENTIALS_JSON='${{ secrets.GOOGLE_CREDENTIALS_JSON }}'
+            --set-env-vars "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},PINECONE_API_KEY=${{ secrets.PINECONE_API_KEY }},GOOGLE_CREDENTIALS_JSON=${{ secrets.GOOGLE_CREDENTIALS_JSON }}"
 
       - name: Fetch service URL
         id: svc
