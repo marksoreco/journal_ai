@@ -57,12 +57,7 @@ jobs:
             --min-instances 0 --max-instances 2 \
             --set-env-vars OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
             --set-env-vars PINECONE_API_KEY=${{ secrets.PINECONE_API_KEY }} \
-            --set-env-vars PINECONE_DENSE_INDEX=${{ vars.PINECONE_DENSE_INDEX }} \
-            --set-env-vars PINECONE_SPARSE_INDEX=${{ vars.PINECONE_SPARSE_INDEX }} \
-            --set-env-vars GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }} \
-            --set-env-vars GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }} \
-            --set-env-vars GOOGLE_CREDENTIALS_JSON='${{ secrets.GOOGLE_CREDENTIALS_JSON }}' \
-            --set-env-vars SECRET_KEY=${{ secrets.SECRET_KEY }}
+            --set-env-vars GOOGLE_CREDENTIALS_JSON='${{ secrets.GOOGLE_CREDENTIALS_JSON }}'
 
       - name: Fetch service URL
         id: svc
@@ -71,21 +66,11 @@ jobs:
           echo "url=$URL" >> $GITHUB_OUTPUT
           echo "Service URL: $URL"
 
-      - name: Ensure SECRET_KEY if not provided
-        id: secret
-        run: |
-          if [ -n "${{ secrets.SECRET_KEY }}" ]; then
-            echo "secret_key=${{ secrets.SECRET_KEY }}" >> $GITHUB_OUTPUT
-          else
-            echo "secret_key=$(python3 - <<'PY'\nimport secrets;print(secrets.token_urlsafe(32))\nPY)" >> $GITHUB_OUTPUT
-          fi
-
       - name: Update envs with GOOGLE_REDIRECT_URI (2nd pass)
         run: |
           gcloud run services update $SERVICE_NAME \
             --region $REGION \
-            --set-env-vars GOOGLE_REDIRECT_URI=${{ steps.svc.outputs.url }}/auth/google/callback \
-            --set-env-vars SECRET_KEY=${{ steps.secret.outputs.secret_key }}
+            --set-env-vars GOOGLE_REDIRECT_URI=${{ steps.svc.outputs.url }}/auth/google/callback
 
       - name: Output final URL
         run: echo "Deployed to ${{ steps.svc.outputs.url }}"
