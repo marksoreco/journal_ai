@@ -60,7 +60,7 @@ async def auth_google(request: Request, t: str | None = None, redirect_to: str =
         raise HTTPException(status_code=500, detail=f"Failed to start OAuth flow: {e}")
 
 @router.get("/auth/google/callback")
-async def auth_google_callback(code: str, state: str):
+async def auth_google_callback(code: str, state: str, request: Request):
     try:
         # Verify state (prevent CSRF; simplified here)
         state_file = "/tmp/gmail/state.txt"
@@ -69,11 +69,12 @@ async def auth_google_callback(code: str, state: str):
         if state != saved_state:
             raise HTTPException(status_code=400, detail="Invalid state parameter")
         
-        # Exchange code for tokens
+        # Exchange code for tokens - use same redirect URI computation as initiation
+        redirect_uri = _compute_redirect_uri(request)
         flow = InstalledAppFlow.from_client_secrets_file(
             GOOGLE_CREDENTIALS_PATH,
             scopes=OAUTH_SCOPES,
-            redirect_uri=OAUTH_REDIRECT_URI
+            redirect_uri=redirect_uri
         )
         flow.fetch_token(code=code)
         creds = flow.credentials

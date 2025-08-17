@@ -46,7 +46,7 @@ jobs:
         run: |
           docker push $AR_HOST/$PROJECT_ID/$REPO_NAME/$IMAGE_NAME:$IMAGE_TAG
 
-      - name: Initial deploy (sets core env vars)
+      - name: Deploy to Cloud Run
         run: |
           gcloud run deploy $SERVICE_NAME \
             --image $AR_HOST/$PROJECT_ID/$REPO_NAME/$IMAGE_NAME:$IMAGE_TAG \
