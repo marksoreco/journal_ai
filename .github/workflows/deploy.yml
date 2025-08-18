@@ -1,0 +1,63 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: [ "git-deploy-to-gcr" ]
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: ${{ vars.PROJECT_ID }}
+  REGION: ${{ vars.REGION }}
+  SERVICE_NAME: ${{ vars.SERVICE_NAME }}
+  REPO_NAME: ${{ vars.REPO_NAME }}
+  IMAGE_NAME: ${{ vars.IMAGE_NAME }}
+  IMAGE_TAG: ${{ github.sha }}
+  AR_HOST: ${{ vars.REGION }}-docker.pkg.dev
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write    # required for WIF (no JSON keys)
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Auth to Google (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.SA_EMAIL }}
+          project_id: ${{ vars.PROJECT_ID }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker auth for Artifact Registry
+        run: gcloud auth configure-docker $AR_HOST -q
+
+      - name: Build Docker image
+        run: |
+          docker build -t $AR_HOST/$PROJECT_ID/$REPO_NAME/$IMAGE_NAME:$IMAGE_TAG .
+
+      - name: Push Docker image
+        run: |
+          docker push $AR_HOST/$PROJECT_ID/$REPO_NAME/$IMAGE_NAME:$IMAGE_TAG
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy $SERVICE_NAME \
+            --image $AR_HOST/$PROJECT_ID/$REPO_NAME/$IMAGE_NAME:$IMAGE_TAG \
+            --region $REGION \
+            --allow-unauthenticated \
+            --port 8080 \
+            --cpu 1 --memory 1Gi --concurrency 80 \
+            --min-instances 0 --max-instances 2 \
+            --set-env-vars OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
+            --set-env-vars PINECONE_API_KEY=${{ secrets.PINECONE_API_KEY }} \
+            --set-env-vars GOOGLE_CREDENTIALS_JSON=${{ secrets.GOOGLE_CREDENTIALS_JSON_B64 }} \
+            --set-env-vars GOOGLE_CREDENTIALS_PATH=/tmp/google_client.json \
+            --set-env-vars SESSION_SECRET_KEY=${{ secrets.SESSION_SECRET_KEY }} \
+            --set-env-vars TODOIST_API_TOKEN=${{ secrets.TODOIST_API_TOKEN }}

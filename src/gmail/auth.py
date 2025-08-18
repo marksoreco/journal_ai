@@ -10,7 +10,19 @@ from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
 
-OAUTH_SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+OAUTH_SCOPES = [
+    'https://www.googleapis.com/auth/gmail.readonly',
+    'openid',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/userinfo.profile'
+]
+
+def _compute_redirect_uri(request: Request, path="/auth/google/callback") -> str:
+    if (fixed := os.getenv("GOOGLE_REDIRECT_URI")):  # optional manual override
+        return fixed
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    host  = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
+    return f"{proto}://{host}{path}"
 
 def get_gmail_service():
     """Get or refresh Gmail service with authentication."""
