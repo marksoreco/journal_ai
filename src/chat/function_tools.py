@@ -58,7 +58,7 @@ def get_function_tools() -> List[Dict]:
         },
         {
             "name": "upload_journal_to_pinecone",
-            "description": "Upload processed journal page OCR data to Pinecone vector database for future search",
+            "description": "Upload processed journal page OCR data to Pinecone vector database as separate section chunks for future search",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -147,7 +147,6 @@ def get_function_tools() -> List[Dict]:
         }
     ]
 
-
 async def execute_function_call_stream(session: ChatSession, function_name: str, function_args: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
     """Execute a function call with streaming progress updates"""
     try:
@@ -183,136 +182,18 @@ async def execute_function_call_stream(session: ChatSession, function_name: str,
         logger.error(f"Error executing streaming function {function_name}: {str(e)}")
         yield {"type": "error", "content": f"Function execution failed: {str(e)}"}
 
-async def _process_journal_image(session: ChatSession, file_id: str, page_type: Optional[str] = None) -> Dict[str, Any]:
-    """Process journal image using the existing LangChain agent with progress updates"""
-    try:
-        # Get file path from session
-        if file_id not in session.uploaded_files:
-            return {"error": f"File {file_id} not found in session"}
-        
-        file_info = session.uploaded_files[file_id]
-        file_path = file_info["path"]
-        
-        # Step 1: Start processing
-        progress_updates = []
-        progress_updates.append("🔄 Starting journal image processing...")
-        
-        # Step 2: Page type detection
-        progress_updates.append("🔍 Detecting page type (Daily, Weekly, or Monthly)...")
-        try:
-            from ..agents.tools.page_detector import PageTypeDetector
-            detector = PageTypeDetector()
-            detection_result = detector.detect_page_type(file_path)
-            detected_page_type = detection_result.page_type.value
-            progress_updates.append(f"✅ Detected page type: {detected_page_type}")
-            progress_updates.append(f"📋 Reasoning: {detection_result.reasoning}")
-        except Exception as e:
-            progress_updates.append(f"❌ Page detection failed: {str(e)}")
-            return {
-                "success": False,
-                "error": f"Page detection failed: {str(e)}",
-                "progress": progress_updates
-            }
-        
-        # Step 3: OCR Processing
-        progress_updates.append("📝 Processing image with OCR to extract content...")
-        try:
-            from ..ocr.gpt4o_ocr import GPT4oOCRAdapter
-            ocr_adapter = GPT4oOCRAdapter()
-            ocr_result = ocr_adapter.extract_text(file_path, detected_page_type)
-            progress_updates.append("✅ OCR processing completed successfully")
+#         return {
+#             "success": True,
+#             "message": "Journal page processed successfully",
+#             "page_type": detected_page_type,
+#             "ocr_data": ocr_result,
+#             "formatted_content": formatted_content,
+#             "confidence_threshold": TASK_CONFIDENCE_THRESHOLD,
+#             "low_confidence_items": low_confidence_items,
+#             "progress": progress_updates,
+#             "filename": file_info["filename"]
+#         }
             
-            # Count extracted items if possible
-            if isinstance(ocr_result, dict):
-                item_count = 0
-                for section, items in ocr_result.items():
-                    if isinstance(items, list):
-                        item_count += len(items)
-                if item_count > 0:
-                    progress_updates.append(f"📊 Extracted {item_count} items from {len(ocr_result)} sections")
-            
-        except Exception as e:
-            progress_updates.append(f"❌ OCR processing failed: {str(e)}")
-            return {
-                "success": False,
-                "error": f"OCR processing failed: {str(e)}",
-                "progress": progress_updates
-            }
-        
-        # Step 4: Complete processing
-        progress_updates.append("🎉 Journal processing completed successfully!")
-        
-        # Store results in session
-        # CACHING DISABLED: Do not store processing state
-        # session.processing_states[file_id] = "completed"
-        logger.info("Caching disabled - processing completion not stored")
-        
-        # Get confidence threshold for formatting
-        from ..todoist.config import TASK_CONFIDENCE_THRESHOLD
-        
-        # Format results using server-side formatter (same logic as classic UI)  
-        try:
-            logger.info(f"About to format {detected_page_type} page with OCR result type: {type(ocr_result)}")
-            
-            # Parse OCR result if it's a JSON string
-            if isinstance(ocr_result, str):
-                try:
-                    import json
-                    ocr_data = json.loads(ocr_result)
-                    logger.info(f"Successfully parsed JSON OCR result with keys: {list(ocr_data.keys())}")
-                except json.JSONDecodeError as e:
-                    logger.error(f"Failed to parse OCR result as JSON: {e}")
-                    logger.error(f"Raw OCR result: {ocr_result}")
-                    raise Exception(f"OCR result is not valid JSON: {e}")
-            else:
-                ocr_data = ocr_result
-                logger.info(f"OCR result is already parsed, keys: {list(ocr_data.keys()) if isinstance(ocr_data, dict) else 'Not a dict'}")
-            
-            formatter = OCRFormatter(confidence_threshold=TASK_CONFIDENCE_THRESHOLD)
-            formatted_content = formatter.format_ocr_results(detected_page_type, ocr_data)
-            
-            # Detect low-confidence items for potential review
-            low_confidence_items = formatter.detect_low_confidence_items(ocr_data)
-            logger.info(f"Successfully formatted {detected_page_type} page with {len(formatted_content)} characters")
-            logger.info(f"Detected {len(low_confidence_items)} low-confidence items")
-        except Exception as format_error:
-            logger.error(f"Formatting error: {str(format_error)}")
-            logger.error(f"OCR result that caused error: {ocr_result}")
-            # Fallback to basic formatting if server-side formatting fails
-            formatted_content = f"**{detected_page_type} Page**\n\nProcessing completed but formatting failed: {str(format_error)}\n\nRaw data available for manual review."
-            low_confidence_items = []  # Empty list if formatting fails
-        
-        # Store low-confidence review data in session for later access
-        if low_confidence_items:
-            session.processing_states['pending_review'] = {
-                'low_confidence_items': low_confidence_items,
-                'ocr_data': ocr_data,
-                'has_items': True
-            }
-        else:
-            session.processing_states['pending_review'] = {
-                'has_items': False
-            }
-
-        return {
-            "success": True,
-            "message": "Journal page processed successfully",
-            "page_type": detected_page_type,
-            "ocr_data": ocr_result,
-            "formatted_content": formatted_content,
-            "confidence_threshold": TASK_CONFIDENCE_THRESHOLD,
-            "low_confidence_items": low_confidence_items,
-            "progress": progress_updates,
-            "filename": file_info["filename"]
-        }
-            
-    except Exception as e:
-        logger.error(f"Error in process_journal_image: {str(e)}")
-        progress_updates.append(f"❌ Processing failed: {str(e)}")
-        return {
-            "error": str(e),
-            "progress": progress_updates
-        }
 
 async def _process_journal_image_stream(session: ChatSession, file_id: str, page_type: Optional[str] = None) -> AsyncGenerator[Dict[str, Any], None]:
     """Process journal image with real-time streaming progress updates"""
@@ -411,17 +292,34 @@ async def _process_journal_image_stream(session: ChatSession, file_id: str, page
             formatted_content = f"**{detected_page_type} Page**\n\nProcessing completed but formatting failed: {str(format_error)}\n\nRaw data available for manual review."
             low_confidence_items = []  # Empty list if formatting fails
         
-        # Store results in session for potential low-confidence review
-        try:
-            session.processing_states['pending_review'] = {
-                'has_items': len(low_confidence_items) > 0,
-                'low_confidence_items': low_confidence_items,
-                'ocr_data': ocr_data,
-                'page_type': detected_page_type
-            }
-            yield {"type": "progress", "content": "💾 Results saved to session"}
-        except Exception as e:
-            yield {"type": "progress", "content": f"⚠️ Could not save to session: {str(e)}"}
+            if isinstance(ocr_data, dict):
+                for key, value in ocr_data.items():
+                    if isinstance(value, list):
+                        logger.info(f"  {key}: {len(value)} items")
+                    else:
+                        logger.info(f"  {key}: {type(value)} - {str(value)[:100]}...")
+            
+            # Store results in session for potential low-confidence review
+            try:
+                if low_confidence_items and len(low_confidence_items) > 0:
+                    session.processing_states['pending_review'] = {
+                        'low_confidence_items': low_confidence_items,
+                        'ocr_data': ocr_data,
+                        'has_items': True,
+                        'item_count': len(low_confidence_items),
+                        'page_type': detected_page_type
+                    }
+                    logger.info(f"Stored {len(low_confidence_items)} low-confidence items for potential review")
+                else:
+                    session.processing_states['pending_review'] = {
+                        'has_items': False,
+                        'item_count': 0,
+                        'page_type': detected_page_type
+                    }
+                    logger.info("No low-confidence items found - review not needed")
+                yield {"type": "progress", "content": "💾 Results saved to session"}
+            except Exception as e:
+                yield {"type": "progress", "content": f"⚠️ Could not save to session: {str(e)}"}
         
         yield {"type": "progress", "content": "🎉 Journal processing completed successfully!"}
         
@@ -485,101 +383,34 @@ def _apply_reviewed_items_to_ocr_data(original_data: Dict[str, Any], reviewed_it
         logger.error(f"Error applying reviewed items: {str(e)}")
         return original_data  # Return original if update fails
 
-async def _upload_to_todoist(session: ChatSession, task_data: str, review_low_confidence: bool = True) -> Dict[str, Any]:
-    """Upload tasks to Todoist with progress updates"""
-    try:
-        progress_updates = []
-        progress_updates.append("📋 Starting Todoist upload process...")
-        
-        # Check if there are reviewed items from a completed review session
-        review_state = session.get_low_confidence_review_state()
-        has_reviewed_items = (review_state and 
-                             not review_state.get('active') and 
-                             review_state.get('reviewed_items'))
-        
-        # Parse task data
-        progress_updates.append("🔍 Parsing task data...")
-        if isinstance(task_data, str):
-            parsed_data = json.loads(task_data)
-        else:
-            parsed_data = task_data
-        
-        # Apply reviewed items if available
-        if has_reviewed_items:
-            progress_updates.append("📝 Applying reviewed low-confidence items...")
-            original_ocr_data = review_state['ocr_data']
-            reviewed_items = review_state['reviewed_items']
-            parsed_data = _apply_reviewed_items_to_ocr_data(original_ocr_data, reviewed_items)
-            progress_updates.append(f"✅ Applied {len(reviewed_items)} reviewed items")
-            
-            # Clear the review state
-            session.clear_low_confidence_review_state()
-        
-        # Count tasks to upload
-        task_count = 0
-        if isinstance(parsed_data, dict):
-            for section, items in parsed_data.items():
-                if isinstance(items, list):
-                    task_count += len(items)
-        
-        if task_count > 0:
-            progress_updates.append(f"📊 Found {task_count} potential tasks to upload")
-        
-        # Use existing Todoist client
-        progress_updates.append("🚀 Uploading tasks to Todoist...")
-        todoist_client = TodoistClient()
-        result = todoist_client.upload_tasks_from_ocr(parsed_data)
-        
-        # Add completion message
-        created_count = result.get("created_count", 0)
-        skipped_count = result.get("skipped_count", 0)
-        
-        if created_count > 0:
-            progress_updates.append(f"✅ Successfully created {created_count} new tasks in Todoist")
-        if skipped_count > 0:
-            progress_updates.append(f"⏭️ Skipped {skipped_count} duplicate tasks")
-        
-        progress_updates.append("🎉 Todoist upload completed!")
-        
-        return {
-            "success": True,
-            "message": result.get("message", "Tasks uploaded successfully"),
-            "created_count": created_count,
-            "skipped_count": skipped_count,
-            "total_tasks": result.get("total_tasks", 0),
-            "progress": progress_updates
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in upload_to_todoist: {str(e)}")
-        progress_updates.append(f"❌ Upload failed: {str(e)}")
-        return {
-            "error": str(e),
-            "progress": progress_updates
-        }
-
 async def _upload_to_todoist_stream(session: ChatSession, task_data: str, review_low_confidence: bool = True) -> AsyncGenerator[Dict[str, Any], None]:
     """Upload tasks to Todoist with real-time streaming progress updates"""
     try:
         yield {"type": "progress", "content": "📋 Starting Todoist upload process..."}
         await asyncio.sleep(0.2)
         
+        # Check if there's final OCR data from Pinecone storage
+        final_ocr_data = session.processing_states.get('final_ocr_data')
+        
         # Check if there are reviewed items from a completed review session
         review_state = session.get_low_confidence_review_state()
         has_reviewed_items = (review_state and 
                              not review_state.get('active') and 
                              review_state.get('reviewed_items'))
         
-        # Parse task data
+        # Parse task data - prefer final OCR data from Pinecone storage
         yield {"type": "progress", "content": "🔍 Parsing task data..."}
         await asyncio.sleep(0.3)
         
-        if isinstance(task_data, str):
+        if final_ocr_data:
+            parsed_data = final_ocr_data
+            yield {"type": "progress", "content": "📝 Using final OCR data from Pinecone storage"}
+        elif isinstance(task_data, str):
             parsed_data = json.loads(task_data)
         else:
             parsed_data = task_data
         
-        # Apply reviewed items if available
+        # Apply reviewed items if available (this would update the final OCR data)
         if has_reviewed_items:
             yield {"type": "progress", "content": "📝 Applying reviewed low-confidence items..."}
             await asyncio.sleep(0.3)
@@ -588,6 +419,9 @@ async def _upload_to_todoist_stream(session: ChatSession, task_data: str, review
             parsed_data = _apply_reviewed_items_to_ocr_data(original_ocr_data, reviewed_items)
             yield {"type": "progress", "content": f"✅ Applied {len(reviewed_items)} reviewed items"}
             await asyncio.sleep(0.2)
+            
+            # Update the final OCR data with reviewed items
+            session.processing_states['final_ocr_data'] = parsed_data
             
             # Clear the review state
             session.clear_low_confidence_review_state()
@@ -656,66 +490,6 @@ async def _upload_to_todoist_stream(session: ChatSession, task_data: str, review
                 "error": str(e),
                 "success": False
             }
-        }
-
-async def _fetch_gmail_data(session: ChatSession, since_date: str, limit: int = 50) -> Dict[str, Any]:
-    """Fetch Gmail data and store in vector database with progress updates"""
-    try:
-        progress_updates = []
-        progress_updates.append("📧 Starting Gmail data fetch...")
-        
-        # Parse date
-        progress_updates.append(f"📅 Fetching emails since {since_date} (limit: {limit})")
-        since_date_obj = datetime.strptime(since_date, "%Y-%m-%d")
-        
-        # Use existing Gmail client
-        progress_updates.append("🔍 Connecting to Gmail API...")
-        gmail_client = GmailClient()
-        emails = gmail_client.get_emails_since_date(since_date_obj, limit)
-        
-        progress_updates.append(f"📬 Found {len(emails)} emails")
-        
-        # Convert to serializable format
-        progress_updates.append("🔄 Processing email data...")
-        emails_data = []
-        for email in emails:
-            emails_data.append({
-                "id": email.id,
-                "subject": email.subject,
-                "sender": email.sender,
-                "date": email.date.isoformat(),
-                "snippet": email.snippet
-            })
-        
-        # Upload to Pinecone (existing functionality)
-        progress_updates.append("🗂️ Storing emails in vector database...")
-        from ..rag.email_vectorizer import EmailVectorizer
-        try:
-            vectorizer = EmailVectorizer()
-            vectorizer_results = vectorizer.process_and_store_emails(emails)
-            progress_updates.append("✅ Successfully stored emails in Pinecone vector database")
-        except Exception as vec_error:
-            logger.error(f"Vector upload failed: {str(vec_error)}")
-            progress_updates.append(f"❌ Vector database storage failed: {str(vec_error)}")
-            vectorizer_results = {"error": str(vec_error)}
-        
-        progress_updates.append("🎉 Gmail data fetch completed!")
-        
-        return {
-            "success": True,
-            "message": f"Fetched {len(emails_data)} emails since {since_date}",
-            "total_emails": len(emails_data),
-            "emails_sample": emails_data[:5],  # Show first 5 as sample
-            "pinecone_upload": vectorizer_results,
-            "progress": progress_updates
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in fetch_gmail_data: {str(e)}")
-        progress_updates.append(f"❌ Gmail fetch failed: {str(e)}")
-        return {
-            "error": str(e),
-            "progress": progress_updates
         }
 
 async def _fetch_gmail_data_stream(session: ChatSession, since_date: str, limit: int = 50) -> AsyncGenerator[Dict[str, Any], None]:
@@ -792,129 +566,6 @@ async def _detect_page_type_stream(session: ChatSession, file_id: str) -> AsyncG
     except Exception as e:
         logger.error(f"Error in streaming detect_page_type: {str(e)}")
         yield {"type": "progress", "content": f"❌ Page type detection failed: {str(e)}"}
-
-async def _detect_page_type(session: ChatSession, file_id: str) -> Dict[str, Any]:
-    """Detect page type from uploaded image with progress updates"""
-    try:
-        progress_updates = []
-        progress_updates.append("🔍 Starting page type detection...")
-        
-        # Get file path from session
-        if file_id not in session.uploaded_files:
-            return {"error": f"File {file_id} not found in session"}
-        
-        file_info = session.uploaded_files[file_id]
-        file_path = file_info["path"]
-        
-        progress_updates.append(f"📄 Analyzing image: {file_info['filename']}")
-        
-        # Use existing page type detector
-        progress_updates.append("🤖 Using AI to detect page layout and type...")
-        detector = PageTypeDetector()
-        result = detector.detect_page_type(file_path)
-        
-        progress_updates.append(f"✅ Detected page type: {result.page_type.value}")
-        progress_updates.append(f"📋 Detection reasoning: {result.reasoning}")
-        
-        return {
-            "success": True,
-            "page_type": result.page_type.value,
-            "reasoning": result.reasoning,
-            "visual_indicators": result.visual_indicators,
-            "filename": file_info["filename"],
-            "progress": progress_updates
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in detect_page_type: {str(e)}")
-        progress_updates.append(f"❌ Page type detection failed: {str(e)}")
-        return {
-            "error": str(e),
-            "progress": progress_updates
-        }
-
-
-
-
-async def _process_edited_item(session: ChatSession, item_text: str) -> Dict[str, Any]:
-    """Process a user-edited or accepted low-confidence item"""
-    try:
-        progress_updates = []
-        
-        # Get current review state
-        review_state = session.get_low_confidence_review_state()
-        if not review_state or not review_state.get('active'):
-            return {
-                "error": "No active review session found"
-            }
-        
-        current_index = review_state['current_index']
-        current_item = review_state['items'][current_index]
-        
-        # Check if user edited the text or kept it as-is
-        original_text = current_item['text']
-        user_edited = item_text.strip() != original_text.strip()
-        
-        if user_edited:
-            progress_updates.append(f"✏️ Item updated to: {item_text}")
-            # Create edited item with high confidence since user reviewed it
-            edited_item = current_item.copy()
-            edited_item['text'] = item_text.strip()
-            edited_item['confidence'] = 1.0
-            review_state['reviewed_items'].append(edited_item)
-        else:
-            progress_updates.append("✅ Item accepted as-is")
-            # Keep original item
-            review_state['reviewed_items'].append(current_item)
-        
-        # Move to next item
-        old_index = review_state['current_index']
-        review_state['current_index'] += 1
-        logger.info(f"Review progress: moved from item {old_index + 1} to item {review_state['current_index'] + 1} of {len(review_state['items'])}")
-        
-        # Check if we're done with all items
-        if review_state['current_index'] >= len(review_state['items']):
-            review_state['active'] = False
-            progress_updates.append("🎉 All items reviewed! Ready for Todoist upload.")
-            
-            # Clear pending review data since review is complete
-            if 'pending_review' in session.processing_states:
-                del session.processing_states['pending_review']
-                logger.info("Cleared pending_review data after completing review")
-            
-            return {
-                "success": True,
-                "message": "Review completed",
-                "review_complete": True,
-                "reviewed_items_count": len(review_state['reviewed_items']),
-                "progress": progress_updates
-            }
-        else:
-            # More items to review - send next item for prefill
-            next_index = review_state['current_index']
-            next_item = review_state['items'][next_index]
-            
-            progress_updates.append(f"➡️ Item {next_index + 1} of {len(review_state['items'])}")
-            
-            return {
-                "success": True,
-                "message": f"Item processed. Continuing with item {next_index + 1}:",
-                "review_complete": False,
-                "next_prefill_item": {
-                    "text": next_item["text"],
-                    "confidence": next_item["confidence"],
-                    "section": next_item["section"],
-                    "index": next_index + 1
-                },
-                "total_items": len(review_state['items']),
-                "progress": progress_updates
-            }
-        
-    except Exception as e:
-        logger.error(f"Error processing edited item: {str(e)}")
-        return {
-            "error": str(e)
-        }
 
 async def _process_edited_item_stream(session: ChatSession, item_text: str) -> AsyncGenerator[Dict[str, Any], None]:
     """Process edited item with streaming progress"""
@@ -1002,59 +653,6 @@ async def _process_edited_item_stream(session: ChatSession, item_text: str) -> A
         logger.error(f"Error in process edited item stream: {str(e)}")
         yield {"type": "progress", "content": f"❌ Processing failed: {str(e)}"}
 
-async def _start_review_from_session(session: ChatSession) -> Dict[str, Any]:
-    """Start review using low-confidence items stored in session"""
-    try:
-        progress_updates = []
-        progress_updates.append("🔍 Starting low-confidence item review...")
-        
-        # Get stored review data from session
-        pending_review = session.processing_states.get('pending_review')
-        if not pending_review or not pending_review.get('has_items'):
-            return {
-                "success": False,
-                "error": "No low-confidence items found in recent processing",
-                "progress": progress_updates
-            }
-        
-        items = pending_review.get('low_confidence_items', [])
-        ocr_data = pending_review.get('ocr_data', {})
-        
-        if not items:
-            progress_updates.append("✅ No low-confidence items to review")
-            return {
-                "success": True,
-                "message": "No low-confidence items found",
-                "progress": progress_updates
-            }
-        
-        # Set up review state in session
-        session.set_low_confidence_review_state(items, ocr_data)
-        
-        # Get first item to review
-        first_item = items[0]
-        progress_updates.append(f"📝 Ready to review {len(items)} low-confidence items")
-        
-        return {
-            "success": True,
-            "message": f"I found {len(items)} low-confidence items that need review. For each of the following items, make any necessary edits, if any, then press Enter to accept.",
-            "total_items": len(items),
-            "start_prefill_editing": True,
-            "current_item": {
-                "text": first_item["text"],
-                "confidence": first_item["confidence"],
-                "section": first_item["section"],
-                "index": 1
-            },
-            "progress": progress_updates
-        }
-        
-    except Exception as e:
-        logger.error(f"Error starting review from session: {str(e)}")
-        return {
-            "error": str(e)
-        }
-
 async def _start_review_from_session_stream(session: ChatSession) -> AsyncGenerator[Dict[str, Any], None]:
     """Start review from session with streaming progress"""
     try:
@@ -1062,13 +660,38 @@ async def _start_review_from_session_stream(session: ChatSession) -> AsyncGenera
         await asyncio.sleep(0.2)
         
         # Get stored review data from session
+        logger.debug(f"Session processing states keys: {list(session.processing_states.keys())}")
         pending_review = session.processing_states.get('pending_review')
-        if not pending_review or not pending_review.get('has_items'):
+        logger.debug(f"Pending review data: {pending_review}")
+        
+        if not pending_review:
+            logger.warning("No pending_review data found in session")
+            yield {"type": "progress", "content": "❌ No pending review data found in session"}
+            return
+            
+        has_items = pending_review.get('has_items', False)
+        items = pending_review.get('low_confidence_items', [])
+
+        # Validate consistency between has_items flag and actual items
+        if has_items and not items:
+            logger.warning("has_items=True but low_confidence_items is empty - correcting flag")
+            pending_review['has_items'] = False
+            has_items = False
+        elif not has_items and items:
+            logger.warning("has_items=False but low_confidence_items has content - correcting flag")  
+            pending_review['has_items'] = True
+            has_items = True
+
+        logger.debug(f"Has items flag: {has_items}, Actual items count: {len(items)}")
+        
+        if not has_items:
             yield {"type": "progress", "content": "❌ No low-confidence items found in recent processing"}
             return
         
-        items = pending_review.get('low_confidence_items', [])
         ocr_data = pending_review.get('ocr_data', {})
+        
+        logger.debug(f"Found {len(items)} low-confidence items in session")
+        logger.debug(f"Items: {items}")
         
         if not items:
             yield {"type": "progress", "content": "✅ No low-confidence items to review"}
@@ -1151,113 +774,360 @@ Respond with only JSON: {"intent": "category", "confidence": 0.9}"""
         logger.error(f"Error in routing: {str(e)}")
         yield {"type": "progress", "content": f"❌ Routing failed: {str(e)}"}
 
-async def _upload_journal_to_pinecone_stream(session: ChatSession, ocr_data: str) -> AsyncGenerator[Dict[str, Any], None]:
-    """Upload journal OCR data to Pinecone vector database"""
-    try:
-        logger.info("Starting journal to Pinecone upload")
-        yield {"type": "progress", "content": "📊 Preparing journal data for vector storage..."}
-        
-        # Parse OCR data
-        import json
+def _detect_page_type_from_data(ocr_dict: Dict[str, Any]) -> str:
+    """Detect page type from OCR data structure"""
+    logger.info(f"Detecting page type from OCR data. Keys: {list(ocr_dict.keys())}")
+    
+    if ocr_dict.get('page_type'):
+        page_type = ocr_dict['page_type'].lower()
+        logger.info(f"Found page_type in data: {page_type}")
+        return page_type
+    elif 'month' in ocr_dict:
+        logger.info("Found 'month' key, detecting as monthly")
+        return "monthly"
+    elif 'week_of' in ocr_dict or 'week' in ocr_dict or 'Weekly Priorities' in ocr_dict:
+        logger.info("Found 'week' key, detecting as weekly")
+        return "weekly" 
+    elif 'date' in ocr_dict:
+        logger.info("Found 'date' key, detecting as daily")
+        return "daily"
+    elif 'items' in ocr_dict and len(ocr_dict.keys()) == 1:
+        # This is a simplified OCR structure - assume daily for now
+        logger.info("Found simplified 'items' structure, assuming daily page")
+        return "daily"
+    else:
+        logger.warning(f"No page type indicators found. Available keys: {list(ocr_dict.keys())}")
+        return "unknown"
+
+def _extract_date_from_data(ocr_dict: Dict[str, Any]) -> str:
+    """Extract date from OCR data based on page type"""
+    page_type = _detect_page_type_from_data(ocr_dict)
+    logger.info(f"Extracting date for page type: {page_type}")
+    
+    if page_type == "monthly" and ocr_dict.get('month'):
+        date_str = str(ocr_dict['month'])
+        logger.info(f"Found monthly date: {date_str}")
+    elif page_type == "weekly" and ocr_dict.get('week_of'):
+        date_str = str(ocr_dict['week_of'])
+        logger.info(f"Found weekly date (week_of): {date_str}")
+    elif page_type == "weekly" and ocr_dict.get('week'):
+        date_str = str(ocr_dict['week'])
+        logger.info(f"Found weekly date (week): {date_str}")
+    elif ocr_dict.get('date'):
+        if isinstance(ocr_dict['date'], dict):
+            date_str = ocr_dict['date'].get('value', 'unknown')
+            logger.info(f"Found daily date (dict): {date_str}")
+        else:
+            date_str = str(ocr_dict['date'])
+            logger.info(f"Found daily date (string): {date_str}")
+    elif page_type == "daily" and 'items' in ocr_dict:
+        # For simplified OCR structure, use current date as fallback
         from datetime import datetime
-        import hashlib
-        
-        ocr_dict = json.loads(ocr_data)
-        
-        # Generate unique ID based on page type and date
-        # Determine page type from OCR data structure
-        page_type = "unknown"
-        if ocr_dict.get('page_type'):
-            page_type = ocr_dict['page_type'].lower()
-        elif 'month' in ocr_dict:
-            page_type = "monthly"
-        elif 'week_of' in ocr_dict or 'week' in ocr_dict:
-            page_type = "weekly" 
-        elif 'date' in ocr_dict:
-            page_type = "daily"
-        
-        # Extract date from OCR data based on page type
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        logger.info(f"Using current date for simplified OCR structure: {date_str}")
+    else:
+        logger.warning(f"No date found for page type {page_type}. Available keys: {list(ocr_dict.keys())}")
         date_str = "unknown"
-        if page_type == "monthly" and ocr_dict.get('month'):
-            date_str = str(ocr_dict['month']).replace(" ", "_")
-        elif page_type == "weekly" and ocr_dict.get('week_of'):
-            date_str = str(ocr_dict['week_of']).replace(" ", "_")
-        elif page_type == "weekly" and ocr_dict.get('week'):
-            date_str = str(ocr_dict['week']).replace(" ", "_")
-        elif ocr_dict.get('date'):
-            if isinstance(ocr_dict['date'], dict):
-                date_str = ocr_dict['date'].get('value', 'unknown')
-            else:
-                date_str = str(ocr_dict['date'])
-                
-        date_str = date_str.replace(" ", "_").replace(",", "").replace("(", "").replace(")", "")
+    
+    # Clean up date string
+    date_str = date_str.replace(" ", "_").replace(",", "").replace("(", "").replace(")", "")
+    logger.info(f"Final cleaned date: {date_str}")
+    return date_str
+
+def _create_section_chunks(ocr_dict: Dict[str, Any], page_type: str, date_str: str) -> List[Dict[str, Any]]:
+    """Create section chunks from OCR data"""
+    chunks = []
+    logger.info(f"Creating section chunks for page type: {page_type}, date: {date_str}")
+    logger.info(f"OCR dict keys: {list(ocr_dict.keys())}")
+    
+    for section_name, section_items in ocr_dict.items():
+        logger.info(f"Processing section: {section_name}, type: {type(section_items)}")
         
-        # Create deterministic ID based on hash of page type and date (not content)
-        # This ensures the same journal page always gets the same ID regardless of OCR variations
-        id_string = f"{page_type}_{date_str}"
-        unique_id = hashlib.md5(id_string.encode()).hexdigest()[:16]
+        # Handle different data types for section_items
+        if isinstance(section_items, list):
+            # List of items - process each item
+            logger.info(f"Section {section_name} has {len(section_items)} items")
+            
+            # Extract text from each item
+            section_texts = []
+            for i, item in enumerate(section_items):
+                if isinstance(item, dict):
+                    # Handle different field names for text content
+                    text = item.get('text') or item.get('task') or item.get('item') or item.get('value', str(item))
+                    logger.info(f"Item {i}: {text[:50]}...")
+                else:
+                    text = str(item)
+                    logger.info(f"Item {i}: {text[:50]}...")
+                section_texts.append(text)
+            
+            # Concatenate into single text
+            section_content = ", ".join(section_texts)
+            items_count = len(section_items)
+            
+        elif isinstance(section_items, str):
+            # String value - use directly
+            logger.info(f"Section {section_name} is a string: {section_items[:100]}...")
+            section_content = section_items
+            items_count = 1
+            
+        elif isinstance(section_items, dict):
+            # Dictionary value - convert to string
+            logger.info(f"Section {section_name} is a dict: {str(section_items)[:100]}...")
+            section_content = str(section_items)
+            items_count = 1
+            
+        else:
+            # Other types - convert to string
+            logger.info(f"Section {section_name} is {type(section_items)}: {str(section_items)[:100]}...")
+            section_content = str(section_items)
+            items_count = 1
         
-        yield {"type": "progress", "content": f"🔖 Generated ID: {unique_id}"}
+        # Skip empty or whitespace-only content
+        if not section_content or not section_content.strip():
+            logger.info(f"Skipping section {section_name} - empty content")
+            continue
         
-        # Upload to Pinecone using separate journal index
-        yield {"type": "progress", "content": "🗃️ Uploading to Pinecone vector database..."}
+        # Generate unique ID
+        section_id = _generate_section_id(date_str, page_type, section_name)
         
+        chunk = {
+            "id": section_id,
+            "content": section_content,
+            "metadata": {
+                "page_type": page_type,
+                "date": date_str,
+                "section_name": section_name,
+                "items_count": items_count,
+                "content_type": "journal_section",
+                "chunk_text": section_content,
+                "upload_timestamp": datetime.now().isoformat()
+            }
+        }
+        chunks.append(chunk)
+        logger.info(f"Created chunk for section {section_name} with ID: {section_id}")
+    
+    logger.info(f"Created {len(chunks)} total chunks")
+    return chunks
+
+def _generate_section_id(date: str, page_type: str, section_name: str) -> str:
+    """Generate deterministic ID for section"""
+    import hashlib
+    id_string = f"{date}_{page_type}_{section_name}"
+    return hashlib.md5(id_string.encode()).hexdigest()[:16]
+
+def _store_chunk_in_pinecone(chunk: Dict[str, Any]) -> bool:
+    """Store single chunk in Pinecone with sparse embeddings"""
+    try:
         from pinecone import Pinecone, ServerlessSpec
+        import re
+        from collections import Counter
         
-        # Direct Pinecone client for journal-specific index
         pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY'))
-        journal_index_name = "journal-sparse-index"
+        index_name = "journal-sparse-index"
         
-        # Create journal-specific sparse index if needed
-        if journal_index_name not in pc.list_indexes().names():
+        # Create index if needed
+        if index_name not in pc.list_indexes().names():
             pc.create_index(
-                name=journal_index_name,
+                name=index_name,
                 dimension=10000,  # Sparse dimension
                 metric="dotproduct",
-                spec=ServerlessSpec(
-                    cloud="aws", 
-                    region="us-east-1"
-                )
+                spec=ServerlessSpec(cloud="aws", region="us-east-1")
             )
         
-        index = pc.Index(journal_index_name)
+        index = pc.Index(index_name)
         
-        # Prepare metadata
-        metadata = {
-            "page_type": page_type,
-            "date": date_str,
-            "content_type": "journal_ocr",
-            "upload_timestamp": datetime.now().isoformat(),
-            "content": json.dumps(ocr_dict)
-        }
+        # Generate sparse embedding from text content
+        text_content = chunk['content']
+        sparse_vector = _create_sparse_embedding(text_content)
         
-        # Create sparse vector from content hash
-        sparse_dimension = 10000
-        sparse_vector = [0.0] * sparse_dimension
-        hash_idx = hash(unique_id) % sparse_dimension
-        sparse_vector[hash_idx] = 1.0
+        # Upsert to Pinecone
+        index.upsert([{
+            "id": chunk['id'],
+            "values": sparse_vector,
+            "metadata": chunk['metadata']
+        }])
         
-        try:
-            index.upsert([{
-                "id": unique_id,
-                "values": sparse_vector,
-                "metadata": metadata
-            }])
-            yield {"type": "progress", "content": f"✅ Journal data stored in separate sparse index with ID: {unique_id}"}
-        except Exception as pinecone_error:
-            logger.error(f"Pinecone upsert failed: {str(pinecone_error)}")
-            yield {"type": "progress", "content": f"❌ Pinecone storage failed: {str(pinecone_error)}"}
+        logger.info(f"Successfully stored chunk {chunk['id']} for section {chunk['metadata']['section_name']} with sparse embedding")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to store chunk {chunk['id']}: {str(e)}")
+        return False
+
+def _create_sparse_embedding(text: str) -> List[float]:
+    """Create sparse embedding from text using TF-IDF-like approach"""
+    import re
+    from collections import Counter
+    import hashlib
+    
+    # Clean and tokenize text
+    text = text.lower()
+    # Remove punctuation but keep important separators
+    text = re.sub(r'[^\w\s\-]', ' ', text)
+    # Split into words
+    words = text.split()
+    
+    # Create word frequency counter
+    word_counts = Counter(words)
+    
+    # Create sparse vector
+    sparse_dimension = 10000
+    sparse_vector = [0.0] * sparse_dimension
+    
+    # Hash each word to a position and set frequency-based value
+    for word, count in word_counts.items():
+        # Hash word to position
+        hash_obj = hashlib.md5(word.encode())
+        position = int(hash_obj.hexdigest(), 16) % sparse_dimension
+        
+        # Set value based on frequency (log-scaled to prevent dominance)
+        import math
+        value = math.log(1 + count) / 10.0  # Normalize to reasonable range
+        sparse_vector[position] = value
+    
+    return sparse_vector
+
+async def _upload_journal_to_pinecone_stream(session: ChatSession, ocr_data: str) -> AsyncGenerator[Dict[str, Any], None]:
+    """Upload journal OCR data to Pinecone as section chunks"""
+    try:
+        logger.info("Starting section-based journal to Pinecone upload")
+        yield {"type": "progress", "content": "📊 Preparing journal data for section-based storage..."}
+        
+        # Get the full OCR data from session instead of using the parameter
+        logger.debug(f"Session processing states keys: {list(session.processing_states.keys())}")
+        pending_review = session.processing_states.get('pending_review')
+        logger.debug(f"Pending review data: {pending_review}")
+        
+        if pending_review and pending_review.get('ocr_data'):
+            ocr_dict = pending_review['ocr_data']
+            logger.info(f"Using full OCR data from session with keys: {list(ocr_dict.keys())}")
+        else:
+            # Fallback to parameter if session data not available
+            import json
+            try:
+                ocr_dict = json.loads(ocr_data)
+                logger.info(f"Using OCR data from parameter with keys: {list(ocr_dict.keys())}")
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON parsing error: {e}")
+                logger.debug(f"Problematic JSON: {ocr_data}")
+                logger.debug(f"Error position: char {e.pos}, line {e.lineno}, column {e.colno}")
+                # Try to fix common JSON issues
+                try:
+                    # Use ast.literal_eval as a fallback for malformed JSON
+                    import ast
+                    ocr_dict = ast.literal_eval(ocr_data)
+                    logger.info("Successfully parsed using ast.literal_eval")
+                except (ValueError, SyntaxError) as e2:
+                    logger.error(f"ast.literal_eval also failed: {e2}")
+                    # Last resort: try to manually fix the JSON
+                    try:
+                        # Remove problematic characters and try again
+                        import re
+                        # Remove or escape problematic quotes
+                        fixed_ocr_data = re.sub(r"'([^']*)'", r'"\1"', ocr_data)
+                        ocr_dict = json.loads(fixed_ocr_data)
+                        logger.debug("Successfully parsed after manual JSON fixing")
+                    except json.JSONDecodeError as e3:
+                        logger.error(f"Manual JSON fixing also failed: {e3}")
+                        # Try with explicit UTF-8 encoding
+                        try:
+                            ocr_dict = json.loads(ocr_data)
+                            logger.debug("Successfully parsed with UTF-8 encoding")
+                        except (json.JSONDecodeError, TypeError) as e4:
+                            logger.error(f"UTF-8 parsing also failed: {e4}")
+                            # Last resort: try to clean Unicode characters
+                            try:
+                                # Replace problematic Unicode characters with boolean values
+                                cleaned_ocr_data = ocr_data.replace('✅', 'true').replace('⬜', 'false')
+                                cleaned_ocr_data = cleaned_ocr_data.replace('✔️', 'true').replace('❌', 'false')
+                                cleaned_ocr_data = cleaned_ocr_data.replace('✓', 'true').replace('✗', 'false')
+                                cleaned_ocr_data = cleaned_ocr_data.replace('☑', 'true').replace('☐', 'false')
+                                cleaned_ocr_data = cleaned_ocr_data.replace('✔', 'true')
+                                ocr_dict = json.loads(cleaned_ocr_data)
+                                logger.debug("Successfully parsed after Unicode character replacement with booleans")
+                            except json.JSONDecodeError as e5:
+                                logger.error(f"Unicode replacement also failed: {e5}")
+                                # Final attempt: try to manually fix the specific error location
+                                try:
+                                    logger.debug(f"Attempting manual fix at position {e5.pos}")
+                                    # Get the character at the error position
+                                    if e5.pos < len(ocr_data):
+                                        problem_char = ocr_data[e5.pos]
+                                        logger.debug(f"Problem character at position {e5.pos}: '{problem_char}' (ord: {ord(problem_char)})")
+                                        # Try to replace the problematic character
+                                        fixed_ocr_data = ocr_data[:e5.pos] + '"' + ocr_data[e5.pos+1:]
+                                        ocr_dict = json.loads(fixed_ocr_data)
+                                        logger.debug("Successfully parsed after manual character replacement")
+                                    else:
+                                        logger.debug(f"Error position {e5.pos} is beyond string length {len(ocr_data)}")
+                                        # Try to add missing closing braces
+                                        try:
+                                            logger.debug("Attempting to add missing closing braces")
+                                            # Count opening and closing braces
+                                            open_braces = ocr_data.count('{')
+                                            close_braces = ocr_data.count('}')
+                                            missing_braces = open_braces - close_braces
+                                            logger.debug(f"Open braces: {open_braces}, Close braces: {close_braces}, Missing: {missing_braces}")
+                                            
+                                            if missing_braces > 0:
+                                                fixed_ocr_data = ocr_data + '}' * missing_braces
+                                                ocr_dict = json.loads(fixed_ocr_data)
+                                                logger.debug(f"Successfully parsed after adding {missing_braces} closing braces")
+                                            else:
+                                                raise Exception(f"JSON parsing failed at position {e5.pos}")
+                                        except Exception as e7:
+                                            logger.error(f"Adding closing braces also failed: {e7}")
+                                            raise Exception(f"JSON parsing failed at position {e5.pos}")
+                                except Exception as e6:
+                                    logger.error(f"Manual character replacement also failed: {e6}")
+                                    raise Exception(f"Failed to parse OCR data as JSON after all attempts: {e}")
+            logger.warning("Session OCR data not found - using simplified parameter data")
+        
+        from datetime import datetime
+        
+        # Extract page info
+        page_type = _detect_page_type_from_data(ocr_dict)
+        date_str = _extract_date_from_data(ocr_dict)
+        
+        yield {"type": "progress", "content": f"🔍 Detected {page_type} page from {date_str}"}
+        
+        # Create section chunks
+        yield {"type": "progress", "content": "📝 Creating section chunks..."}
+        section_chunks = _create_section_chunks(ocr_dict, page_type, date_str)
+        
+        yield {"type": "progress", "content": f"📋 Created {len(section_chunks)} sections"}
+        
+        # Store each section in Pinecone
+        yield {"type": "progress", "content": "🗃️ Storing sections in Pinecone..."}
+        
+        stored_sections = []
+        for chunk in section_chunks:
+            section_name = chunk['metadata']['section_name']
+            yield {"type": "progress", "content": f"💾 Storing {section_name} section..."}
+            
+            # Store chunk in Pinecone
+            success = _store_chunk_in_pinecone(chunk)
+            if success:
+                stored_sections.append(section_name)
+                yield {"type": "progress", "content": f"✅ Stored {section_name} section"}
+            else:
+                yield {"type": "progress", "content": f"❌ Failed to store {section_name} section"}
+        
+        yield {"type": "progress", "content": f"✅ Successfully stored {len(stored_sections)} sections"}
+        
+        # Store final OCR data in session (Todoist upload is a separate optional step)
+        session.processing_states['final_ocr_data'] = ocr_dict
         
         yield {
             "type": "function_result",
             "data": {
                 "success": True,
-                "pinecone_id": unique_id,
+                "total_sections": len(section_chunks),
                 "page_type": page_type,
                 "date": date_str
             }
         }
         
     except Exception as e:
-        logger.error(f"Error uploading journal to Pinecone: {str(e)}")
-        yield {"type": "progress", "content": f"❌ Pinecone upload failed: {str(e)}"}
+        logger.error(f"Error in section-based Pinecone upload: {str(e)}")
+        yield {"type": "progress", "content": f"❌ Storage failed: {str(e)}"}

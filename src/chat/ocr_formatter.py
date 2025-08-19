@@ -74,38 +74,32 @@ class OCRFormatter:
         low_confidence_items = []
         logger.info(f"Detecting low-confidence items. Available sections: {list(data.keys())}")
         
-        def check_item(item, section_name, field_name='task', item_index=None):
-            """Helper to check if an item has low confidence"""
-            if isinstance(item, dict):
-                text = item.get(field_name) or item.get('item') or item.get('value')
-                confidence = item.get('confidence')
-                
-                if text and confidence and confidence < self.confidence_threshold:
-                    low_confidence_items.append({
-                        'text': text,
-                        'confidence': confidence,
-                        'section': section_name,
-                        'field_name': field_name,
-                        'item_index': item_index,
-                        'original_item': item
-                    })
-        
-        # Only check sections that get uploaded to Todoist
-        # Based on todoist_client.py - only prepare_priority and to_do sections are uploaded
-        
-        if data.get('prepare_priority'):
-            logger.info(f"Checking {len(data['prepare_priority'])} prepare_priority items")
-            for index, item in enumerate(data['prepare_priority']):
-                check_item(item, 'prepare_priority', 'task', index)
-        
-        if data.get('to_do'):
-            logger.info(f"Checking {len(data['to_do'])} to_do items")
-            for index, item in enumerate(data['to_do']):
-                logger.info(f"to_do[{index}] item structure: {item}")
-                # Try both 'task' and 'item' field names for to_do items
-                check_item(item, 'to_do', 'task', index)  # Try 'task' first
-                if not any(lc['section'] == 'to_do' and lc['item_index'] == index for lc in low_confidence_items):
-                    check_item(item, 'to_do', 'item', index)  # Fallback to 'item'
+        # Check all sections that contain lists of items
+        for section_name, section_items in data.items():
+            if isinstance(section_items, list) and section_items:
+                logger.info(f"Checking {len(section_items)} {section_name} items")
+                for index, item in enumerate(section_items):
+                    if isinstance(item, dict):
+                        # Try different field names for text content (in priority order)
+                        text = item.get('task') or item.get('item') or item.get('value') or item.get('text')
+                        confidence = item.get('confidence')
+                        
+                        # Determine the actual field name used
+                        field_name = 'task' if item.get('task') else \
+                                    'item' if item.get('item') else \
+                                    'value' if item.get('value') else \
+                                    'text' if item.get('text') else None
+                        
+                        if text and confidence and confidence < self.confidence_threshold and field_name:
+                            low_confidence_items.append({
+                                'text': text,
+                                'confidence': confidence,
+                                'section': section_name,
+                                'field_name': field_name,
+                                'item_index': index,
+                                'original_item': item
+                            })
+                            logger.info(f"Found low-confidence item in {section_name}: '{text}' (confidence: {confidence})")
         
         logger.info(f"Found {len(low_confidence_items)} low-confidence items total")
         
@@ -246,8 +240,6 @@ class OCRFormatter:
         """Format Weekly page data - matches classic UI formatWeeklyPageMarkdown"""
         try:
             lines = []
-            lines.append("📊 **Weekly Summary**")
-            lines.append("")
             
             logger.info(f"Formatting weekly page with data keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
             

@@ -146,7 +146,7 @@ IMPORTANT: For each extracted item, provide a realistic confidence score (0.0 to
 
 Confidence guidelines:
 - 0.90-1.0: Perfect clarity, printed text, or very neat handwriting
-- 0.80-0.89: Clear handwriting, complete words, high certainty
+- 0.80-0.89: Clear handwriting, complete words, high confidence
 - 0.70-0.79: Readable but some uncertainty, minor smudges, special characters, etc.
 - 0.60-0.69: Somewhat unclear, partial words, moderate uncertainty
 - 0.50-0.59: Unclear text, significant uncertainty, possible errors
